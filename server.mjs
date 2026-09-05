@@ -39,6 +39,10 @@ const MEDIA_EXT = /\.(mp4|m4v|webm|ogv|ogm|mov|mkv|avi|ts|m2ts|mts|mpg|mpeg|3gp|
 const NATIVE_CONTAINER = /\.(mp4|m4v|mov|webm|ogv|mp3|m4a|aac|wav|flac|opus|oga)$/i;
 const NATIVE_VIDEO = new Set(['h264', 'vp8', 'vp9', 'av1']);
 const NATIVE_AUDIO = new Set(['aac', 'mp3', 'opus', 'vorbis', 'flac', 'pcm_s16le']);
+/* текстовые субтитры перегоняются в WebVTT; растровые (PGS, VOBSUB)
+   в текст не превращаются — их можно только вжигать в картинку,
+   а это полное перекодирование видео */
+const TEXT_SUBS = new Set(['subrip', 'srt', 'ass', 'ssa', 'webvtt', 'mov_text', 'text', 'stl']);
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8',
@@ -82,6 +86,7 @@ async function probe(file) {
 
   const video = (raw.streams || []).filter(s => s.codec_type === 'video' && !s.disposition?.attached_pic);
   const audio = (raw.streams || []).filter(s => s.codec_type === 'audio');
+  const subs = (raw.streams || []).filter(s => s.codec_type === 'subtitle');
 
   const info = {
     path: file, name: path.basename(file), size: st.size,
@@ -97,8 +102,15 @@ async function probe(file) {
       default: !!s.disposition?.default, forced: !!s.disposition?.forced,
       comment: !!s.disposition?.comment, native: NATIVE_AUDIO.has(s.codec_name),
     })),
+    subs: subs.map((s, i) => ({
+      index: s.index, order: i, codec: s.codec_name,
+      lang: (s.tags?.language || '').toLowerCase(), title: s.tags?.title || '',
+      default: !!s.disposition?.default, forced: !!s.disposition?.forced,
+      text: TEXT_SUBS.has(s.codec_name),
+    })),
   };
   info.defaultAudio = (info.audio.find(a => a.default) || info.audio[0] || null)?.index ?? null;
+  info.defaultSub = (info.subs.find(x => x.text && x.default) || null)?.index ?? null;
   probeCache.set(key, info);
   return info;
 }
@@ -204,6 +216,25 @@ function startJob(key, file, info, audioIndex, plan) {
     }
   });
   return job;
+}
+
+/* ── извлечение субтитров ────────────────────────────────── */
+const subJobs = new Map();
+
+function extractSubs(file, idx, out) {
+  const part = out + '.part';
+  return new Promise((ok, bad) => {
+    /* -vn -an: видео и звук не нужны, демуксер пропустит их пакеты */
+    const proc = spawn('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-nostdin', '-y',
+      '-i', file, '-map', `0:${idx}`, '-vn', '-an', '-c:s', 'webvtt', '-f', 'webvtt', part]);
+    let tail = '';
+    proc.stderr.on('data', d => { tail = (tail + d).slice(-800); });
+    proc.on('error', bad);
+    proc.on('exit', async code => {
+      if (code !== 0) { try { await fsp.unlink(part); } catch {} return bad(new Error(tail || 'код ' + code)); }
+      try { await fsp.rename(part, out); ok(out); } catch (e) { bad(e); }
+    });
+  });
 }
 
 /* ── раздача файла с поддержкой Range ────────────────────── */
@@ -369,6 +400,40 @@ const server = http.createServer(async (req, res) => {
       if (job.error) return json(res, 200, { state: 'error', error: job.error });
       return json(res, 200, { state: 'working', key, progress: job.progress,
         phase: job.phase, cmd: job.cmd, elapsed: Date.now() - job.started, duration: info.duration });
+    }
+
+    /* Субтитры отдельным файлом WebVTT: браузер понимает только его,
+       а SRT и ASS внутри MKV — нет. Результат кэшируется. */
+    if (p === '/api/subs') {
+      if (!await checkFfmpeg()) return res.writeHead(503).end('нет ffmpeg');
+      const file = safePath(url.searchParams.get('path'));
+      if (!file) return res.writeHead(403).end('forbidden');
+      const st = await fsp.stat(file).catch(() => null);
+      if (!st?.isFile()) return res.writeHead(404).end('not found');
+
+      const idx = Number(url.searchParams.get('s'));
+      if (!isFinite(idx)) return res.writeHead(400).end('bad stream');
+
+      const out = path.join(CACHE, keyFor(file, st, 'sub' + idx) + '.vtt');
+      if (!fs.existsSync(out)) {
+        const pending = subJobs.get(out);
+        if (pending) await pending;
+        else {
+          const job = extractSubs(file, idx, out);
+          subJobs.set(out, job);
+          try { await job; } catch (e) {
+            subJobs.delete(out);
+            console.error('  субтитры:', String(e.message).slice(0, 200));
+            return res.writeHead(500).end('не удалось извлечь субтитры');
+          }
+          subJobs.delete(out);
+        }
+      }
+      const vst = await fsp.stat(out).catch(() => null);
+      if (!vst) return res.writeHead(500).end('пусто');
+      res.writeHead(200, { 'content-type': 'text/vtt; charset=utf-8',
+        'content-length': vst.size, 'cache-control': 'no-store' });
+      return fs.createReadStream(out).pipe(res);
     }
 
     /* подготовленный файл */

@@ -15,18 +15,21 @@ const pulseEl = $('#pulse'), pulseIcon = $('#pulseIcon'), flashEl = $('#flash');
 const notice = $('#notice'), noticeText = $('#noticeText');
 const endCard = $('#endCard'), endMeta = $('#endMeta');
 const emptyEl = $('#empty'), modeHint = $('#modeHint');
-const prep = $('#prep'), prepName = $('#prepName'), prepSteps = $('#prepSteps'), prepCmd = $('#prepCmd');
+const prep = $('#prep'), prepName = $('#prepName'), prepTrack = $('#prepTrack');
+const prepSteps = $('#prepSteps'), prepCmd = $('#prepCmd');
 const deck = $('#deck'), seek = $('#seek'), seekFill = $('#seekFill');
 const seekBuffer = $('#seekBuffer'), seekKnob = $('#seekKnob'), seekTip = $('#seekTip');
 const tCur = $('#tCur'), tDur = $('#tDur');
 const btnPlay = $('#btnPlay'), playIcon = $('#playIcon');
 const btnMute = $('#btnMute'), volIcon = $('#volIcon'), volBar = $('#volBar'), volFill = $('#volFill');
 const btnRate = $('#btnRate'), btnLoop = $('#btnLoop'), btnList = $('#btnList');
+const btnAuto = $('#btnAuto');
 const btnPip = $('#btnPip'), btnFull = $('#btnFull');
 const btnPipMode = $('#btnPipMode'), pipMenu = $('#pipMenu'), pipSeg = $('#pipSeg');
 const rateMenu = $('#rateMenu');
 const btnAudio = $('#btnAudio'), audioLabel = $('#audioLabel'), audioMenu = $('#audioMenu');
-const queueList = $('#queueList'), queueCount = $('#queueCount'), queueTotal = $('#queueTotal');
+const btnSubs = $('#btnSubs'), subsMenu = $('#subsMenu');
+const queueList = $('#queueList'), queueFiles = $('#queueFiles'), queueTotal = $('#queueTotal');
 const ghostName = $('#ghostName');
 const filePick = $('#filePick'), dirPick = $('#dirPick');
 const dropveil = $('#dropveil'), toastEl = $('#toast');
@@ -37,7 +40,15 @@ const btnDisk = $('#btnDisk'), btnEmptyDisk = $('#btnEmptyDisk');
 /* ── состояние ───────────────────────────────────────────── */
 const state = {
   list: [], current: null,
-  loop: false, queueOpen: true,
+  loop: 'off', queueOpen: true,
+  autoplay: localStorage.getItem('pip.autoplay') !== '0',
+  audioPref: null,   // какую дорожку выбрали руками — перенесём на следующие файлы
+  subPref: null,     // то же для субтитров; null означает «выключены»
+  cue: {             // оформление субтитров, всё в пределах того, что умеет ::cue
+    size: localStorage.getItem('pip.cue.size') || 'm',
+    bg:   localStorage.getItem('pip.cue.bg')   || 'shadow',
+    pos:  localStorage.getItem('pip.cue.pos')  || 'auto',
+  },
   pipWin: null, errStreak: 0, seq: 0,
   server: null,            // ответ /api/ping либо null
   seekPreview: null,       // показываемая позиция во время перемотки
@@ -128,13 +139,23 @@ function stopPlayback() {
    Показываем сами шаги и команду, которая исполняется. */
 const PREP_STEPS = [
   { id: 'probe',    text: 'ffprobe — читаю дорожки и кодеки' },
-  { id: 'convert',  text: 'ffmpeg — видео копирую, звук перекодирую в AAC' },
+  { id: 'convert',  text: 'ffmpeg — видео копирую, выбранную дорожку перекодирую в AAC' },
   { id: 'finalize', text: 'faststart — переношу индекс в начало файла' },
 ];
+
+function trackLabel(it) {
+  const t = (it.tracks || []).find(x => x.index === it.audioIndex);
+  if (!t) return '';
+  const lang = langName(t.lang), title = (t.title || '').trim();
+  const head = lang && title ? `${lang} · ${title}` : lang || title || `дорожка ${t.order + 1}`;
+  return [head, t.codec.toUpperCase(), channelsLabel(t.channels, t.layout)].filter(Boolean).join(' · ');
+}
 
 function showProgress(it, info) {
   closeMenus();
   prepName.textContent = it.name;
+  const lab = trackLabel(it);
+  prepTrack.textContent = lab ? 'Звуковая дорожка: ' + lab : '';
 
   const phase = info.phase || 'convert';
   const order = ['probe', 'convert', 'finalize'];
@@ -148,10 +169,9 @@ function showProgress(it, info) {
     const mark = done ? '✓' : active ? '' : '';
     li.innerHTML = `<span class="step__mark">${mark}</span><span class="step__text"></span><span class="step__aux"></span>`;
     li.querySelector('.step__text').textContent = st.text;
-    if (active && st.id === 'convert' && info.progress != null)
-      li.querySelector('.step__aux').textContent = Math.round(info.progress * 100) + ' %';
-    if (active && info.elapsed)
-      li.querySelector('.step__aux').textContent += (li.querySelector('.step__aux').textContent ? ' · ' : '') + fmt(info.elapsed / 1000);
+    /* никаких процентов: faststart о своём продвижении не сообщает,
+       и на нём любая цифра залипала бы. Показываем только время работы. */
+    if (active && info.elapsed) li.querySelector('.step__aux').textContent = fmt(info.elapsed / 1000);
     prepSteps.append(li);
   });
 
@@ -195,6 +215,14 @@ function prefetchNext() {
 
 async function sourceFor(it) {
   if (it.kind === 'local') return it.url;
+  /* дорожку выбираем ДО подготовки: иначе мост потратит целый проход
+     на дорожку по умолчанию, а нужна перенесённая с прошлого файла */
+  await probeItem(it);
+  if (it.carried) {
+    it.carried = false;
+    const t = (it.tracks || []).find(x => x.index === it.audioIndex);
+    if (t) toast('Дорожка как в прошлом файле: ' + (t.title || langName(t.lang)));
+  }
   const r = await ensureReady(it);
   if (!r) return null;
   return r.state === 'direct'
@@ -233,7 +261,8 @@ function addServerFiles(entries) {
   for (const e of entries) {
     state.list.push({
       id: ++state.seq, kind: 'server', name: e.name, path: e.path,
-      size: e.size || 0, dur: null, err: false, tracks: null, audioIndex: null, probed: false,
+      size: e.size || 0, dur: null, err: false, tracks: null, audioIndex: null,
+      subs: null, subIndex: undefined, probed: false,
     });
   }
   render(); probeServer();
@@ -267,13 +296,32 @@ function probeLocal() {
   prober.src = it.url;
 }
 
+/* ── выбор дорожки переносится на следующие файлы ─────────────
+   Сначала пробуем полное совпадение набора дорожек — у серий одного
+   релиза он одинаков, тогда достаточно взять ту же по счёту. Дальше
+   по языку с названием студии, потом просто по языку. */
+const trackSig = ts => ts.map(t => `${t.lang}|${(t.title || '').trim()}|${t.codec}|${t.channels}`).join('/');
+const same = (a, b) => (a || '').trim().toLowerCase() === (b || '').trim().toLowerCase();
+
+function rememberTrack(it, index) {
+  const t = (it.tracks || []).find(x => x.index === index);
+  if (!t) return;
+  state.audioPref = { sig: trackSig(it.tracks), order: t.order, lang: t.lang, title: t.title };
+}
+
+function preferredTrack(it) {
+  const p = state.audioPref;
+  if (!p || !it.tracks || !it.tracks.length) return null;
+  if (p.sig === trackSig(it.tracks) && it.tracks[p.order]) return it.tracks[p.order].index;
+  const byBoth = it.tracks.find(t => same(t.lang, p.lang) && same(t.title, p.title));
+  if (byBoth) return byBoth.index;
+  const byLang = it.tracks.find(t => same(t.lang, p.lang));
+  return byLang ? byLang.index : null;
+}
+
 /* ── ffprobe для серверных файлов ────────────────────────── */
-let probingServer = false;
-async function probeServer() {
-  if (probingServer) return;
-  const it = state.list.find(i => i.kind === 'server' && !i.probed);
-  if (!it) return;
-  probingServer = true;
+async function probeItem(it) {
+  if (it.probed) return;
   try {
     const r = await fetch('/api/probe?path=' + encodeURIComponent(it.path));
     if (r.ok) {
@@ -281,14 +329,29 @@ async function probeServer() {
       it.dur = info.duration;
       it.tracks = info.audio;
       it.defaultAudio = info.defaultAudio;
-      if (it.audioIndex == null) it.audioIndex = info.defaultAudio;
       it.videoCodec = info.video ? info.video.codec : null;
+      it.subs = info.subs || [];
+      if (it.subIndex === undefined) it.subIndex = preferredSub(it);
+      if (it.audioIndex == null) {
+        const want = preferredTrack(it);
+        it.audioIndex = want != null ? want : info.defaultAudio;
+        it.carried = want != null && want !== info.defaultAudio;
+      }
     }
   } catch (_) { /* сервер мог уйти — не страшно */ }
   it.probed = true;
+}
+
+let probingServer = false;
+async function probeServer() {
+  if (probingServer) return;
+  const it = state.list.find(i => i.kind === 'server' && !i.probed);
+  if (!it) return;
+  probingServer = true;
+  await probeItem(it);
   probingServer = false;
   paintMeta();
-  if (it === cur()) syncAudioButton();
+  if (it === cur()) { syncAudioButton(); syncSubsButton(); }
   probeServer();
 }
 
@@ -384,7 +447,8 @@ async function playItem(it, autoplay = true) {
   video.src = src;
   video.load();
   if (autoplay) video.play().catch(() => toast('Нажмите play — браузер ждёт действия'));
-  syncAudioButton(); armAudioCheck(); prefetchNext();
+  syncAudioButton(); syncSubsButton(); applySubs(it);
+  armAudioCheck(); prefetchNext();
 }
 
 /* смена дорожки: другой подготовленный файл, но то же место просмотра */
@@ -398,21 +462,24 @@ async function switchTrack(it) {
   video.load();
   video.addEventListener('loadedmetadata', () => { video.currentTime = at; }, { once: true });
   if (playing) video.play().catch(() => {});
-  syncAudioButton();
+  syncAudioButton(); syncSubsButton(); applySubs(it);
 }
 
 function next(auto = false) {
   const i = idxOf(cur());
   if (i < 0) { if (state.list.length) playItem(state.list[0]); return; }
+  /* повтор одного файла срабатывает только сам по себе:
+     кнопкой «дальше» пользователь всё равно уходит на следующий */
+  if (auto && state.loop === 'one') { video.currentTime = 0; video.play().catch(() => {}); return; }
   if (i + 1 < state.list.length) return playItem(state.list[i + 1]);
-  if (state.loop && state.list.length) return playItem(state.list[0]);
+  if (state.loop === 'queue' && state.list.length) return playItem(state.list[0]);
   if (auto) endOfQueue(); else toast('Это последний файл');
 }
 function prev() {
   const i = idxOf(cur());
   if (position() > 3) return seekTo(0);
   if (i > 0) playItem(state.list[i - 1]);
-  else if (state.loop && state.list.length) playItem(state.list[state.list.length - 1]);
+  else if (state.loop === 'queue' && state.list.length) playItem(state.list[state.list.length - 1]);
   else seekTo(0);
 }
 function endOfQueue() {
@@ -467,15 +534,24 @@ stage.addEventListener('pointermove', poke);
 deck.addEventListener('pointerenter', () => { overDeck = true; });
 deck.addEventListener('pointerleave', () => { overDeck = false; poke(); });
 
-let clickT = null;
+let clickT = null, justClosedQueue = 0;
 video.addEventListener('click', e => {
   e.preventDefault();
+  /* открытая очередь закрывается первым же кликом по кадру — сразу,
+     без ожидания двойного, и не трогая воспроизведение */
+  if (state.queueOpen && !state.pipWin) {
+    clearTimeout(clickT); clickT = null;
+    justClosedQueue = Date.now();
+    toggleQueue(false);
+    return;
+  }
   if (state.pipWin) return togglePlay();
   if (clickT) return;
   clickT = setTimeout(() => { clickT = null; togglePlay(); }, 200);
 });
 video.addEventListener('dblclick', e => {
   e.preventDefault(); clearTimeout(clickT); clickT = null;
+  if (Date.now() - justClosedQueue < 400) return;   // второй клик закрытия — не полный экран
   if (!state.pipWin) toggleFull();
 });
 
@@ -642,16 +718,213 @@ function pickAudio(opt) {
   }
   if (it.audioIndex === opt.id) return;
   it.audioIndex = opt.id;
+  rememberTrack(it, opt.id);
   hideNotice();
   toast('Дорожка: ' + opt.main);
   switchTrack(it);
 }
 
+/* ═══════════════ субтитры ═══════════════
+   Дорожки субтитров живут в файле отдельно от звуковых и с ними никак
+   не связаны: язык озвучки и язык субтитров выбираются независимо.
+   Браузер понимает только WebVTT, поэтому мост перегоняет текстовую
+   дорожку в него. Растровые (PGS, VOBSUB) в текст не превращаются. */
+function subOptions() {
+  const it = cur();
+  if (!it || it.kind !== 'server' || !it.subs) return [];
+  return it.subs.map(t => {
+    const lang = langName(t.lang);
+    const title = (t.title || '').trim();
+    const main = lang && title ? `${lang} · ${title}`
+               : lang || title || `Дорожка ${t.order + 1}`;
+    const bits = [`#${t.order + 1}`, t.codec.toUpperCase()];
+    if (t.forced) bits.push('форсированные');
+    if (t.default) bits.push('по умолчанию');
+    if (!t.text) bits.push('растровые — браузер не покажет');
+    return { id: t.index, main, sub: bits.join(' · '), text: t.text, sel: t.index === it.subIndex };
+  });
+}
+
+function syncSubsButton() {
+  const opts = subOptions();
+  btnSubs.hidden = !opts.length;
+  const on = cur() && cur().subIndex != null;
+  btnSubs.classList.toggle('on', !!on);
+  const sel = opts.find(o => o.sel);
+  btnSubs.title = sel ? 'Субтитры: ' + sel.main : 'Субтитры выключены';
+  if (!opts.length) subsMenu.classList.remove('open');
+}
+
+function buildSubsMenu() {
+  const opts = subOptions();
+  subsMenu.replaceChildren();
+  const head = document.createElement('div');
+  head.className = 'menu__title';
+  head.textContent = 'Субтитры';
+  subsMenu.append(head);
+
+  if (!opts.length) {
+    const e = document.createElement('div');
+    e.className = 'menu__empty';
+    e.textContent = state.server ? 'В этом файле нет субтитров.'
+                                 : 'Субтитры доступны только в серверном режиме.';
+    subsMenu.append(e);
+    return;
+  }
+
+  const row = (main, sub, sel, off, disabled) => {
+    const b = document.createElement('button');
+    b.className = 'menu__item' + (sel ? ' sel' : '');
+    b.disabled = !!disabled;
+    b.innerHTML = `<span class="menu__tick">${svg('<path d="M5 12.5l4.5 4.5L19 7"/>')}</span>
+      <span class="menu__body"><span class="menu__main"></span>${sub ? '<span class="menu__sub"></span>' : ''}</span>`;
+    b.querySelector('.menu__main').textContent = main;
+    if (sub) b.querySelector('.menu__sub').textContent = sub;
+    b.onclick = () => { if (!disabled) { pickSub(off); subsMenu.classList.remove('open'); } };
+    subsMenu.append(b);
+  };
+
+  row('Выключены', '', cur().subIndex == null, null, false);
+  for (const o of opts) row(o.main, o.sub, o.sel, o, !o.text);
+  if (opts.some(o => o.text)) appendCueControls();
+}
+
+function pickSub(opt) {
+  const it = cur();
+  if (!it) return;
+  it.subIndex = opt ? opt.id : null;
+  state.subPref = opt ? { sig: subSig(it.subs), order: (it.subs.find(x => x.index === opt.id) || {}).order,
+                          lang: (it.subs.find(x => x.index === opt.id) || {}).lang,
+                          title: (it.subs.find(x => x.index === opt.id) || {}).title }
+                      : null;
+  applySubs(it);
+  syncSubsButton();
+  toast(opt ? 'Субтитры: ' + opt.main : 'Субтитры выключены');
+}
+
+const subSig = ts => (ts || []).map(t => `${t.lang}|${(t.title || '').trim()}|${t.codec}`).join('/');
+
+function preferredSub(it) {
+  const p = state.subPref;
+  if (!p || !it.subs || !it.subs.length) return null;
+  const text = it.subs.filter(t => t.text);
+  if (!text.length) return null;
+  if (p.sig === subSig(it.subs) && it.subs[p.order] && it.subs[p.order].text) return it.subs[p.order].index;
+  const byBoth = text.find(t => same(t.lang, p.lang) && same(t.title, p.title));
+  if (byBoth) return byBoth.index;
+  const byLang = text.find(t => same(t.lang, p.lang));
+  return byLang ? byLang.index : null;
+}
+
+/* дорожка подключается к video отдельным элементом track */
+async function applySubs(it) {
+  video.querySelectorAll('track').forEach(t => t.remove());
+  if (!it || it.subIndex == null || it.kind !== 'server') return;
+
+  const url = `/api/subs?path=${encodeURIComponent(it.path)}&s=${it.subIndex}`;
+  try {
+    /* тянем заранее, чтобы поймать ошибку и показать её, а не молчать */
+    const r = await fetch(url);
+    if (!r.ok) { toast('Не удалось извлечь субтитры'); it.subIndex = null; syncSubsButton(); return; }
+  } catch (_) { return; }
+  if (it !== cur() || it.subIndex == null) return;
+
+  const t = document.createElement('track');
+  t.kind = 'subtitles';
+  t.src = url;
+  t.default = true;
+  video.append(t);
+  /* включаем после того, как браузер разберёт файл */
+  t.addEventListener('load', () => {
+    if (t.track) t.track.mode = 'showing';
+    applyCueLine();
+  }, { once: true });
+  setTimeout(() => { if (t.track) { t.track.mode = 'showing'; applyCueLine(); } }, 200);
+}
+
+/* Что реально поддаётся управлению у WebVTT: размер, подложка и высота
+   строки. Всё остальное (шрифт реплики, позиция по горизонтали, стили
+   ASS) задаётся самим файлом и браузером не отдаётся. */
+const CUE_SIZE = { s: '80%',  m: '100%', l: '128%', xl: '160%' };
+const CUE_BG = {
+  none:   { bg: 'transparent', sh: 'none' },
+  shadow: { bg: 'transparent', sh: '0 1px 3px #000, 0 0 6px rgba(0,0,0,.95), 0 0 1px #000' },
+  plate:  { bg: 'rgba(0,0,0,.72)', sh: 'none' },
+};
+const CUE_POS = { low: -1, auto: 'auto', high: -4 };
+
+const CUE_UI = [
+  { key: 'size', label: 'Размер',    opts: [['s','S'], ['m','M'], ['l','L'], ['xl','XL']] },
+  { key: 'bg',   label: 'Подложка',  opts: [['none','Нет'], ['shadow','Тень'], ['plate','Плашка']] },
+  { key: 'pos',  label: 'Положение', opts: [['low','Ниже'], ['auto','Обычно'], ['high','Выше']] },
+];
+
+function applyCueStyle() {
+  const c = state.cue, b = CUE_BG[c.bg] || CUE_BG.shadow;
+  /* переменные ставим на сам video: он переезжает в окно PiP вместе
+     со сценой, а переменные документа туда бы не попали */
+  video.style.setProperty('--cue-size', CUE_SIZE[c.size] || '100%');
+  video.style.setProperty('--cue-bg', b.bg);
+  video.style.setProperty('--cue-shadow', b.sh);
+  applyCueLine();
+}
+
+function applyCueLine() {
+  const v = CUE_POS[state.cue.pos];
+  for (const tr of video.textTracks || []) {
+    if (!tr.cues) continue;
+    for (const cue of tr.cues) { try { cue.line = v; } catch (_) {} }
+  }
+}
+
+function setCue(key, val) {
+  state.cue[key] = val;
+  localStorage.setItem('pip.cue.' + key, val);
+  applyCueStyle();
+  buildSubsMenu();
+}
+
+function appendCueControls() {
+  const sep = document.createElement('div');
+  sep.className = 'menu__sep';
+  subsMenu.append(sep);
+
+  const head = document.createElement('div');
+  head.className = 'menu__title';
+  head.textContent = 'Оформление';
+  subsMenu.append(head);
+
+  for (const row of CUE_UI) {
+    const line = document.createElement('div');
+    line.className = 'menu__row';
+    const lab = document.createElement('span');
+    lab.textContent = row.label;
+    const group = document.createElement('div');
+    group.className = 'seg2';
+    for (const [val, text] of row.opts) {
+      const b = document.createElement('button');
+      b.textContent = text;
+      b.className = state.cue[row.key] === val ? 'sel' : '';
+      b.onclick = ev => { ev.stopPropagation(); setCue(row.key, val); };
+      group.append(b);
+    }
+    line.append(lab, group);
+    subsMenu.append(line);
+  }
+}
+
+btnSubs.onclick = e => {
+  e.stopPropagation();
+  buildSubsMenu();
+  closeMenus(subsMenu);
+  subsMenu.classList.toggle('open');
+};
+
 function closeMenus(except) {
-  for (const m of [audioMenu, pipMenu, rateMenu]) if (m && m !== except) m.classList.remove('open');
+  for (const m of [audioMenu, pipMenu, rateMenu, subsMenu]) if (m && m !== except) m.classList.remove('open');
 }
 function anyMenuOpen() {
-  return [audioMenu, pipMenu, rateMenu].some(m => m && m.classList.contains('open'));
+  return [audioMenu, pipMenu, rateMenu, subsMenu].some(m => m && m.classList.contains('open'));
 }
 btnAudio.onclick = e => {
   e.stopPropagation();
@@ -695,7 +968,7 @@ $('#noticeAction').onclick = () => {
 
 /* ═══════════════ очередь ═══════════════ */
 function render() {
-  queueCount.textContent = state.list.length;
+  queueFiles.textContent = `${state.list.length} ${plural(state.list.length, 'файл', 'файла', 'файлов')}`;
 
   if (!state.list.length) {
     queueList.innerHTML = '<li class="queue__empty">Очередь пуста.<br>Перетащите файлы или папку.</li>';
@@ -708,7 +981,7 @@ function render() {
   stage.classList.remove('empty');
 
   const frag = document.createDocumentFragment();
-  state.list.forEach((it, i) => {
+  state.list.forEach(it => {
     const li = document.createElement('li');
     li.className = 'item' + (it === cur() ? ' active' : '') + (it.err ? ' bad' : '');
     if (it === cur() && !video.paused) li.classList.add('playing');
@@ -716,7 +989,6 @@ function render() {
     li.dataset.id = it.id;
     li.innerHTML =
       `<span class="item__grip">${svg('<path d="M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01" stroke-width="2.4"/>')}</span>` +
-      `<span class="item__num">${i + 1}</span>` +
       `<span class="item__eq"><i></i><i></i><i></i></span>` +
       `<span class="item__body"><span class="item__name"></span><span class="item__meta"></span></span>` +
       `<span class="item__x" title="Убрать">${svg('<path d="M7 7l10 10M17 7L7 17"/>')}</span>`;
@@ -778,46 +1050,81 @@ function removeItem(it) {
   render();
 }
 
-/* перетаскивание внутри списка */
-let dragItem = null;
+/* ═══════════════ перетаскивание внутри списка ═══════════════
+   Позиция вставки считается геометрически, по координате курсора
+   относительно середин строк. Через e.target это работало рвано:
+   под курсором мог оказаться вложенный span или зазор списка, и тогда
+   метка пропадала, а при отпускании файл улетал в конец.
+
+   Перетаскиваемая строка сразу переезжает в вычисленное место и служит
+   слотом, а соседи доезжают анимацией FLIP: замеряем положение до
+   перестановки, после неё компенсируем сдвиг трансформом и снимаем его. */
+let dragEl = null;
+
+function flipMove(mutate) {
+  const kids = [...queueList.children];
+  const before = new Map(kids.map(k => [k, k.getBoundingClientRect().top]));
+  mutate();
+  for (const k of queueList.children) {
+    const was = before.get(k);
+    if (was == null) continue;
+    const delta = was - k.getBoundingClientRect().top;
+    if (!delta) continue;
+    k.style.transition = 'none';
+    k.style.transform = `translateY(${delta}px)`;
+  }
+  requestAnimationFrame(() => {
+    for (const k of queueList.children) {
+      if (!k.style.transform) continue;
+      k.style.transition = 'transform 240ms cubic-bezier(.22,.8,.24,1)';
+      k.style.transform = '';
+    }
+  });
+}
+
+/* строка, ПЕРЕД которой встанет перетаскиваемая; null — в самый конец */
+function insertionRef(y) {
+  for (const li of queueList.querySelectorAll('.item:not(.dragging)')) {
+    const r = li.getBoundingClientRect();
+    if (y < r.top + r.height / 2) return li;
+  }
+  return null;
+}
+
 queueList.addEventListener('dragstart', e => {
   const li = e.target.closest('.item');
   if (!li) return;
-  dragItem = li; li.classList.add('dragging');
+  dragEl = li;
   e.dataTransfer.effectAllowed = 'move';
   try { e.dataTransfer.setData('text/plain', li.dataset.id); } catch (_) {}
+  /* класс вешаем следующим кадром: иначе браузер снимет с изменённой
+     строки картинку перетаскивания и она будет полупрозрачной */
+  requestAnimationFrame(() => li.classList.add('dragging'));
 });
-queueList.addEventListener('dragend', () => {
-  if (dragItem) dragItem.classList.remove('dragging');
-  dragItem = null; clearMarks();
-});
+
 queueList.addEventListener('dragover', e => {
-  if (!dragItem) return;
-  e.preventDefault(); e.dataTransfer.dropEffect = 'move';
-  const li = e.target.closest('.item');
-  clearMarks();
-  if (!li || li === dragItem) return;
-  const r = li.getBoundingClientRect();
-  li.classList.add(e.clientY < r.top + r.height / 2 ? 'drop-before' : 'drop-after');
+  if (!dragEl) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const ref = insertionRef(e.clientY);
+  if (ref === dragEl || ref === dragEl.nextElementSibling) return;   // уже на месте
+  flipMove(() => queueList.insertBefore(dragEl, ref));
 });
-queueList.addEventListener('drop', e => {
-  if (!dragItem) return;
-  e.preventDefault(); e.stopPropagation();
-  const li = e.target.closest('.item');
-  const from = state.list.findIndex(x => String(x.id) === dragItem.dataset.id);
-  if (from < 0) return;
-  const moved = state.list.splice(from, 1)[0];
-  if (!li || li === dragItem) state.list.push(moved);
-  else {
-    const r = li.getBoundingClientRect();
-    let to = state.list.findIndex(x => String(x.id) === li.dataset.id);
-    if (e.clientY >= r.top + r.height / 2) to += 1;
-    state.list.splice(to, 0, moved);
-  }
-  clearMarks(); render();
-});
-const clearMarks = () => queueList.querySelectorAll('.drop-before,.drop-after')
-  .forEach(n => n.classList.remove('drop-before', 'drop-after'));
+
+function commitDrag() {
+  if (!dragEl) return;
+  dragEl.classList.remove('dragging');
+  dragEl = null;
+  for (const k of queueList.children) { k.style.transition = ''; k.style.transform = ''; }
+
+  /* порядок берём из разметки — она уже переставлена */
+  const at = new Map([...queueList.children].map((li, i) => [li.dataset.id, i]));
+  state.list.sort((x, y) => at.get(String(x.id)) - at.get(String(y.id)));
+  paintMeta();   // без render(), иначе анимация оборвётся пересборкой строк
+}
+
+queueList.addEventListener('drop', e => { e.preventDefault(); e.stopPropagation(); commitDrag(); });
+queueList.addEventListener('dragend', commitDrag);
 
 $('#btnSort').onclick = () => { state.list.sort((a, b) => collator.compare(a.path, b.path)); render(); toast('Отсортировано по имени'); };
 $('#btnReverse').onclick = () => { state.list.reverse(); render(); toast('Порядок обращён'); };
@@ -1020,14 +1327,19 @@ video.addEventListener('loadedmetadata', () => {
   state.seekPreview = null;
   const it = cur();
   if (it && isFinite(video.duration) && video.duration) it.dur = video.duration;
-  paintSeek(); paintMeta(); syncAudioButton();
+  paintSeek(); paintMeta(); syncAudioButton(); syncSubsButton();
 });
 video.addEventListener('volumechange', paintVolume);
 video.addEventListener('ratechange', () => {
   btnRate.textContent = (video.playbackRate % 1 ? video.playbackRate : video.playbackRate.toFixed(0)) + '×';
 });
 video.addEventListener('playing', () => { state.errStreak = 0; state.seekPreview = null; syncStatus(); });
-video.addEventListener('ended', () => next(true));
+video.addEventListener('ended', () => {
+  /* повтор одного файла работает и при выключенном автопереходе:
+     это явно заданный режим, а не автоматика */
+  if (state.loop !== 'one' && !state.autoplay) { toast('Автопереход выключен'); return; }
+  next(true);
+});
 
 video.addEventListener('error', () => {
   const it = cur();
@@ -1079,11 +1391,38 @@ btnRate.onclick = e => {
   closeMenus(rateMenu);
   rateMenu.classList.toggle('open');
 };
-btnLoop.onclick = () => {
-  state.loop = !state.loop;
-  btnLoop.classList.toggle('on', state.loop);
-  toast(state.loop ? 'Очередь будет повторяться' : 'Повтор очереди выключен');
+const LOOP_MODES = ['off', 'queue', 'one'];
+const LOOP_ICON = {
+  off:   '<path d="M4 10a4 4 0 014-4h12M20 14a4 4 0 01-4 4H4"/><path d="M17 3l3 3-3 3M7 15l-3 3 3 3"/>',
+  queue: '<path d="M4 10a4 4 0 014-4h12M20 14a4 4 0 01-4 4H4"/><path d="M17 3l3 3-3 3M7 15l-3 3 3 3"/>',
+  one:   '<path d="M4 10a4 4 0 014-4h12M20 14a4 4 0 01-4 4H4"/><path d="M17 3l3 3-3 3M7 15l-3 3 3 3"/>'
+       + '<path d="M11.1 10.9l1.5-1v4.6"/>',
 };
+const LOOP_TITLE = {
+  off: 'Без повтора', queue: 'Повторять очередь', one: 'Повторять один файл',
+};
+
+function paintLoop() {
+  btnLoop.innerHTML = svg(LOOP_ICON[state.loop]);
+  btnLoop.title = LOOP_TITLE[state.loop];
+  btnLoop.classList.toggle('on', state.loop !== 'off');
+}
+btnLoop.onclick = () => {
+  state.loop = LOOP_MODES[(LOOP_MODES.indexOf(state.loop) + 1) % LOOP_MODES.length];
+  paintLoop();
+  toast(LOOP_TITLE[state.loop]);
+};
+function paintAuto() {
+  btnAuto.classList.toggle('on', state.autoplay);
+  btnAuto.title = state.autoplay ? 'Автопереход включён' : 'Автопереход выключен';
+}
+btnAuto.onclick = () => {
+  state.autoplay = !state.autoplay;
+  localStorage.setItem('pip.autoplay', state.autoplay ? '1' : '0');
+  paintAuto();
+  toast(state.autoplay ? 'Автопереход к следующему включён' : 'Автопереход выключен');
+};
+
 $('#btnRestart').onclick = () => { endCard.classList.remove('show'); if (state.list.length) playItem(state.list[0]); };
 $('#btnEndClose').onclick = () => endCard.classList.remove('show');
 $('#helpClose').onclick = () => helpModal.classList.remove('open');
@@ -1102,13 +1441,13 @@ dirPick.onchange = e => { addLocalFiles(e.target.files); e.target.value = ''; };
 /* ── перетаскивание извне ────────────────────────────────── */
 let dragDepth = 0;
 window.addEventListener('dragenter', e => {
-  if (dragItem || !e.dataTransfer || ![...e.dataTransfer.types].includes('Files')) return;
+  if (dragEl || !e.dataTransfer || ![...e.dataTransfer.types].includes('Files')) return;
   dragDepth++; dropveil.classList.add('show');
 });
-window.addEventListener('dragover', e => { if (!dragItem) e.preventDefault(); });
+window.addEventListener('dragover', e => { if (!dragEl) e.preventDefault(); });
 window.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; dropveil.classList.remove('show'); } });
 window.addEventListener('drop', async e => {
-  if (dragItem) return;
+  if (dragEl) return;
   e.preventDefault();
   dragDepth = 0; dropveil.classList.remove('show');
   const dt = e.dataTransfer;
@@ -1223,7 +1562,10 @@ function onKey(e) {
     case 'q': case 'Q': case 'й': case 'Й': toggleQueue(); break;
     case 'Home': e.preventDefault(); seekTo(0); break;
     case 'End':  e.preventDefault(); seekTo(duration() - 2); break;
-    case 'Escape': if (state.pipWin) state.pipWin.close(); break;
+    case 'Escape':
+      if (state.pipWin) state.pipWin.close();
+      else if (state.queueOpen) toggleQueue(false);
+      break;
     default:
       if (/^[0-9]$/.test(e.key) && duration()) {
         e.preventDefault();
@@ -1250,8 +1592,9 @@ async function detectServer() {
 
 (async function boot() {
   video.volume = 1;
-  paintVolume(); paintSeek(); render();
+  paintVolume(); paintSeek(); paintLoop(); paintAuto(); applyCueStyle(); render();
   btnAudio.hidden = true;
+  btnSubs.hidden = true;
 
   state.server = await detectServer();
 

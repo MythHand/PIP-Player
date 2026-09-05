@@ -52,6 +52,7 @@
               <span>Готовлю файл для браузера</span>
             </div>
             <div class="prep__name" id="prepName">—</div>
+            <div class="prep__track" id="prepTrack"></div>
             <ol class="prep__steps" id="prepSteps"></ol>
             <div class="prep__cmd" id="prepCmd"></div>
             <div class="prep__note">Звук перекодируется один раз. Дальше файл играется и перематывается как обычный, а следующая серия готовится фоном.</div>
@@ -95,12 +96,21 @@
               <button class="rb hide-in-pip" id="btnLoop" title="Повторять очередь">
                 <svg viewBox="0 0 24 24"><path d="M4 10a4 4 0 014-4h12M20 14a4 4 0 01-4 4H4"/><path d="M17 3l3 3-3 3M7 15l-3 3 3 3"/></svg>
               </button>
+              <button class="rb hide-in-pip" id="btnAuto" title="Автопереход к следующему">
+                <svg viewBox="0 0 24 24"><path d="M3.5 5.5h17v13h-17z"/><path d="M10 9.5l5 2.5-5 2.5z"/></svg>
+              </button>
               <div class="menuwrap">
                 <button class="rb rb--wide" id="btnAudio" title="Звуковая дорожка">
                   <svg viewBox="0 0 24 24"><path d="M6 10v4M10 7v10M14 5v14M18 9v6"/></svg>
                   <span id="audioLabel">Дорожка</span>
                 </button>
                 <div class="menu menu--left" id="audioMenu"></div>
+              </div>
+              <div class="menuwrap">
+                <button class="rb" id="btnSubs" title="Субтитры">
+                  <svg viewBox="0 0 24 24"><path d="M3.5 5.5h17v13h-17z"/><path d="M6.5 11h5M14 11h3.5M6.5 14.5h3M12 14.5h5.5"/></svg>
+                </button>
+                <div class="menu menu--left" id="subsMenu"></div>
               </div>
             </div>
 
@@ -177,28 +187,23 @@
 
     <!-- ───────────── очередь ───────────── -->
     <aside class="queue" id="queue">
-      <div class="queue__top">
-        <div class="queue__h">
-          <h2>Очередь</h2>
-          <span class="badge" id="queueCount">0</span>
-        </div>
-        <button class="rb rb--sm" id="btnQueueClose" title="Скрыть · Q">
-          <svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></svg>
-        </button>
-      </div>
-
       <div class="queue__tools">
         <button class="tag" id="btnSort">По имени</button>
         <button class="tag" id="btnReverse">Обратный порядок</button>
         <button class="tag" id="btnShuffle">Перемешать</button>
         <div class="spacer"></div>
-        <button class="tag tag--quiet" id="btnClear">Очистить</button>
+        <button class="rb rb--sm" id="btnQueueClose" title="Скрыть · Q">
+          <svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></svg>
+        </button>
       </div>
 
       <ol class="queue__list" id="queueList"></ol>
 
       <div class="queue__foot">
-        <span id="queueTotal">0:00:00</span>
+        <div class="queue__sum">
+          <span id="queueFiles">0 файлов</span>
+          <span id="queueTotal">0:00:00</span>
+        </div>
         <div class="queue__add">
           <button class="tag" id="btnDisk" hidden>
             <svg viewBox="0 0 20 20"><path d="M2.5 5.5h5l1.5 2h8.5v9h-15z"/></svg>
@@ -212,6 +217,7 @@
             <svg viewBox="0 0 20 20"><path d="M2.5 5.5h5l1.5 2h8.5v9h-15z"/></svg>
             Папка
           </button>
+          <button class="tag tag--quiet" id="btnClear">Очистить</button>
         </div>
       </div>
     </aside>
