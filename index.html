@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PIP Player</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='15' fill='%230b0b0c'/><circle cx='16' cy='16' r='9' fill='none' stroke='%23fff' stroke-width='1.5'/><circle cx='16' cy='16' r='3' fill='%23fff'/></svg>">
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ───────────── workspace ───────────── -->
+  <main class="workspace" id="workspace">
+
+    <section class="stage-host" id="stageHost">
+      <div class="stage" id="stage" tabindex="0">
+        <video id="video" playsinline></video>
+
+        <!-- мягкая подложка сверху, зеркальная нижней -->
+        <div class="scrim" id="scrim" aria-hidden="true"></div>
+
+        <!-- имя файла, левый верхний угол -->
+        <div class="titlechip" id="titleChip">
+          <div class="titlechip__row">
+            <span class="titlechip__name" id="titleName">—</span>
+          </div>
+          <div class="titlechip__path" id="titlePath"></div>
+        </div>
+
+        <div class="pulse" id="pulse" aria-hidden="true">
+          <svg viewBox="0 0 24 24" id="pulseIcon"><path d="M8 5.5v13l10-6.5z"/></svg>
+        </div>
+        <div class="flash" id="flash" aria-hidden="true"></div>
+
+        <!-- предупреждение про недекодируемый звук -->
+        <div class="notice" id="notice">
+          <svg viewBox="0 0 20 20" class="notice__ico"><path d="M10 6.5v4.5M10 13.5v.5"/><circle cx="10" cy="10" r="7.5"/></svg>
+          <span class="notice__text" id="noticeText"></span>
+          <button class="notice__act" id="noticeAction">Как починить</button>
+          <button class="notice__x" id="noticeClose" aria-label="Скрыть">
+            <svg viewBox="0 0 20 20"><path d="M6 6l8 8M14 6l-8 8"/></svg>
+          </button>
+        </div>
+
+        <!-- подготовка файла -->
+        <div class="prep" id="prep">
+          <div class="prep__box">
+            <div class="prep__head">
+              <span class="spin" aria-hidden="true"></span>
+              <span>Готовлю файл для браузера</span>
+            </div>
+            <div class="prep__name" id="prepName">—</div>
+            <ol class="prep__steps" id="prepSteps"></ol>
+            <div class="prep__cmd" id="prepCmd"></div>
+            <div class="prep__note">Звук перекодируется один раз. Дальше файл играется и перематывается как обычный, а следующая серия готовится фоном.</div>
+          </div>
+        </div>
+
+        <!-- конец очереди -->
+        <div class="endcard" id="endCard">
+          <div class="endcard__box">
+            <div class="endcard__ring"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+            <h2>Очередь закончилась</h2>
+            <p id="endMeta">—</p>
+            <div class="row">
+              <button class="btn btn--solid" id="btnRestart">Смотреть сначала</button>
+              <button class="btn" id="btnEndClose">Закрыть</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── панель управления ── -->
+        <div class="deck" id="deck">
+          <div class="deck__scrub">
+            <span class="deck__t" id="tCur">0:00</span>
+            <div class="seek" id="seek" role="slider" tabindex="0"
+                 aria-label="Позиция воспроизведения" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+              <div class="seek__rail">
+                <div class="seek__buf" id="seekBuffer"></div>
+                <div class="seek__fill" id="seekFill"></div>
+              </div>
+              <div class="seek__knob" id="seekKnob"></div>
+              <div class="seek__tip" id="seekTip">0:00</div>
+            </div>
+            <span class="deck__t deck__t--dim" id="tDur">0:00</span>
+          </div>
+
+          <div class="deck__ctrls">
+            <div class="deck__side deck__side--left">
+              <button class="rb hide-in-pip" id="btnList" title="Очередь · Q">
+                <svg viewBox="0 0 24 24"><path d="M4 7h11M4 12h11M4 17h7"/><path d="M17 10l4 2.5-4 2.5z"/></svg>
+              </button>
+              <button class="rb hide-in-pip" id="btnLoop" title="Повторять очередь">
+                <svg viewBox="0 0 24 24"><path d="M4 10a4 4 0 014-4h12M20 14a4 4 0 01-4 4H4"/><path d="M17 3l3 3-3 3M7 15l-3 3 3 3"/></svg>
+              </button>
+              <div class="menuwrap">
+                <button class="rb rb--wide" id="btnAudio" title="Звуковая дорожка">
+                  <svg viewBox="0 0 24 24"><path d="M6 10v4M10 7v10M14 5v14M18 9v6"/></svg>
+                  <span id="audioLabel">Дорожка</span>
+                </button>
+                <div class="menu menu--left" id="audioMenu"></div>
+              </div>
+            </div>
+
+            <div class="deck__center">
+              <button class="rb" id="btnPrev" title="Предыдущий · B">
+                <svg viewBox="0 0 24 24"><path d="M7 6v12M18 6.5v11L9.5 12z"/></svg>
+              </button>
+              <button class="rb rb--main" id="btnPlay" title="Пауза · Пробел">
+                <svg viewBox="0 0 24 24" id="playIcon"><path d="M8 5.5v13l10-6.5z"/></svg>
+              </button>
+              <button class="rb" id="btnNext" title="Следующий · N">
+                <svg viewBox="0 0 24 24"><path d="M17 6v12M6 6.5v11L14.5 12z"/></svg>
+              </button>
+            </div>
+
+            <div class="deck__side deck__side--right">
+              <div class="vol" id="vol">
+                <button class="rb" id="btnMute" title="Звук · M">
+                  <svg viewBox="0 0 24 24" id="volIcon"><path d="M4 9h3.5L12 5.5v13L7.5 15H4z"/><path d="M15.5 9.5a4 4 0 010 5"/></svg>
+                </button>
+                <div class="vol__bar" id="volBar" role="slider" tabindex="0" aria-label="Громкость">
+                  <div class="vol__rail"><div class="vol__fill" id="volFill"></div></div>
+                </div>
+              </div>
+
+              <div class="menuwrap">
+                <button class="rb rb--wide" id="btnRate" title="Скорость">1×</button>
+                <div class="menu" id="rateMenu"></div>
+              </div>
+
+              <div class="menuwrap seg" id="pipSeg">
+                <button class="rb seg__main" id="btnPip" title="Картинка в картинке · P">
+                  <svg viewBox="0 0 24 24"><path d="M3.5 5.5h17v13h-17z"/><path d="M12 12h6.5v4.5H12z"/></svg>
+                </button>
+                <button class="rb seg__more hide-in-pip" id="btnPipMode" title="Режим PiP">
+                  <svg viewBox="0 0 24 24"><path d="M7 14l5-5 5 5"/></svg>
+                </button>
+                <div class="menu" id="pipMenu"></div>
+              </div>
+
+              <button class="rb hide-in-pip" id="btnFull" title="Полный экран · F">
+                <svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- пустое состояние -->
+        <div class="empty" id="empty">
+          <div class="empty__box">
+            <div class="empty__ring"></div>
+            <h1>Выберите, что смотреть</h1>
+            <p>Перетащите сюда файлы или папку с сериалом.<br>Всё читается локально, ничего не уходит в сеть.</p>
+            <div class="row">
+              <button class="btn btn--solid" id="btnEmptyFiles">Выбрать файлы</button>
+              <button class="btn" id="btnEmptyFolder">Выбрать папку</button>
+              <button class="btn" id="btnEmptyDisk" hidden>Обзор диска</button>
+            </div>
+            <div class="empty__hint" id="modeHint"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- пока картинка живёт в PiP-окне -->
+      <div class="ghost" id="pipGhost">
+        <div class="ghost__box">
+          <div class="ghost__eq"><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="ghost__label">Воспроизводится в отдельном окне</div>
+          <div class="ghost__name" id="ghostName">—</div>
+          <button class="btn btn--solid" id="btnPipBack">Вернуть сюда</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ───────────── очередь ───────────── -->
+    <aside class="queue" id="queue">
+      <div class="queue__top">
+        <div class="queue__h">
+          <h2>Очередь</h2>
+          <span class="badge" id="queueCount">0</span>
+        </div>
+        <button class="rb rb--sm" id="btnQueueClose" title="Скрыть · Q">
+          <svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></svg>
+        </button>
+      </div>
+
+      <div class="queue__tools">
+        <button class="tag" id="btnSort">По имени</button>
+        <button class="tag" id="btnReverse">Обратный порядок</button>
+        <button class="tag" id="btnShuffle">Перемешать</button>
+        <div class="spacer"></div>
+        <button class="tag tag--quiet" id="btnClear">Очистить</button>
+      </div>
+
+      <ol class="queue__list" id="queueList"></ol>
+
+      <div class="queue__foot">
+        <span id="queueTotal">0:00:00</span>
+        <div class="queue__add">
+          <button class="tag" id="btnDisk" hidden>
+            <svg viewBox="0 0 20 20"><path d="M2.5 5.5h5l1.5 2h8.5v9h-15z"/></svg>
+            Обзор диска
+          </button>
+          <button class="tag" id="btnAddFiles">
+            <svg viewBox="0 0 20 20"><path d="M10 4v12M4 10h12"/></svg>
+            Файлы
+          </button>
+          <button class="tag" id="btnAddFolder">
+            <svg viewBox="0 0 20 20"><path d="M2.5 5.5h5l1.5 2h8.5v9h-15z"/></svg>
+            Папка
+          </button>
+        </div>
+      </div>
+    </aside>
+  </main>
+</div>
+
+<!-- ───────────── обзор диска (серверный режим) ───────────── -->
+<div class="modal" id="browserModal">
+  <div class="modal__card modal__card--wide">
+    <div class="modal__head">
+      <h2>Обзор диска</h2>
+      <button class="rb rb--sm" id="brClose"><svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></svg></button>
+    </div>
+    <div class="browser">
+      <nav class="browser__places" id="brPlaces"></nav>
+      <div class="browser__main">
+        <div class="browser__bar">
+          <button class="rb rb--sm" id="brUp" title="Вверх"><svg viewBox="0 0 24 24"><path d="M12 19V6M6 12l6-6 6 6"/></svg></button>
+          <div class="browser__path" id="brPath">—</div>
+          <button class="btn btn--solid btn--sm" id="brAddAll">Добавить всю папку</button>
+        </div>
+        <ul class="browser__list" id="brList"></ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────── справка про звук ───────────── -->
+<div class="modal" id="helpModal">
+  <div class="modal__card">
+    <div class="modal__head">
+      <h2>Почему нет звука</h2>
+      <button class="rb rb--sm" id="helpClose"><svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></svg></button>
+    </div>
+    <div class="prose">
+      <p>В MKV-релизах звук обычно в <b>AC-3, E-AC-3, DTS или FLAC</b>. Браузер такие
+      кодеки не декодирует: картинка идёт, звук молчит. Выбор дорожки тут не поможет —
+      в Chrome вдобавок вообще нет API переключения дорожек для локальных файлов.</p>
+      <p>Решает это локальный мост на вашем ffmpeg. Он читает список дорожек и на лету
+      перекодирует выбранную в AAC, а видео отдаёт без пережатия.</p>
+      <div class="code" id="helpCmd">node server.mjs</div>
+      <p class="prose__dim">Затем откройте <b>http://127.0.0.1:8777</b>. Появятся кнопка
+      «Обзор диска» и список звуковых дорожек с языками.</p>
+    </div>
+  </div>
+</div>
+
+<div class="dropveil" id="dropveil"><div class="dropveil__box">Отпустите — добавлю в очередь</div></div>
+<div class="toast" id="toast"></div>
+
+<input type="file" id="filePick" multiple accept="video/*,audio/*,.mkv,.avi,.mov,.m4v,.webm,.mp4,.ogv,.mp3,.m4a,.flac,.opus" hidden>
+<input type="file" id="dirPick" webkitdirectory directory multiple hidden>
+<video id="prober" preload="metadata" hidden muted></video>
+
+<script src="app.js"></script>
+</body>
+</html>
