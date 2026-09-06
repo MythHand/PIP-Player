@@ -112,7 +112,54 @@ const liveClasses = new Set();
   });
 }
 
-/* ── 5. один селектор объявлен дважды с конфликтом display ── */
+/* ── 5. свойства, отданные на волю порядка в файле ──────────
+   Если у элемента два класса и оба одиночными селекторами задают одно
+   и то же свойство раскладки, победит просто тот, что ниже. Так
+   .menuwrap перебил .gear и выкинул кнопку в обычный поток. */
+{
+  const KEY = ['position', 'display', 'overflow', 'z-index',
+               'top', 'right', 'bottom', 'left'];
+  const single = new Map();   // класс -> { свойство: [значение, порядок] }
+  rules.forEach((r, i) => {
+    const m = /^\.([\w-]+)$/.exec(r.sel.trim());
+    if (!m) return;
+    const bag = single.get(m[1]) || {};
+    for (const prop of KEY) {
+      const d = new RegExp('(?:^|;)\\s*' + prop + '\\s*:\\s*([^;}]+)').exec(r.decl);
+      if (d) bag[prop] = [d[1].trim(), i];
+    }
+    single.set(m[1], bag);
+  });
+
+  const seen = new Set();
+  walk(parse(html), node => {
+    if (node.cls.length < 2) return;
+    for (const prop of KEY) {
+      const decls = node.cls
+        .map(c => [c, (single.get(c) || {})[prop]])
+        .filter(([, v]) => v);
+      if (decls.length < 2) continue;
+      /* .block и .block--mod — намеренная пара, но только если модификатор
+         объявлен НИЖЕ базы. Выше — база его перебьёт, и это ошибка.
+         Независимые классы (.gear и .menuwrap) опасны в любом порядке. */
+      const isMod = (a, b) => a.startsWith(b + '--') || a.startsWith(b + '__');
+      const okPair = ([a, av], [b, bv]) =>
+        (isMod(a, b) && av[1] > bv[1]) || (isMod(b, a) && bv[1] > av[1]);
+      if (decls.every(x => decls.every(y => x[0] === y[0] || okPair(x, y)))) continue;
+      const vals = new Set(decls.map(([, v]) => v[0]));
+      if (vals.size < 2) continue;
+      const win = decls.reduce((a, b) => (a[1][1] > b[1][1] ? a : b));
+      const key = node.cls.join('.') + prop;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      fail(`у .${node.cls.join('.')} свойство ${prop} задают ` +
+           decls.map(([c, v]) => `.${c}:${v[0]}`).join(' и ') +
+           ` — побеждает .${win[0]} только из-за порядка в файле`);
+    }
+  });
+}
+
+/* ── 6. один селектор объявлен дважды с конфликтом display ── */
 {
   const seen = new Map();
   for (const r of rules) {

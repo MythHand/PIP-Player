@@ -74,6 +74,35 @@ async function checkFfmpeg() {
   return ffmpegOk;
 }
 
+/* Аппаратный кодировщик нужен только когда видео нельзя скопировать —
+   на практике это HEVC. Пережатие процессором грузит все ядра на минуты,
+   videotoolbox уводит его в медиадвижок. PIP_ENCODER=software отключает. */
+let hwEnc;
+async function checkHw() {
+  if (hwEnc !== undefined) return hwEnc;
+  hwEnc = null;
+  if (process.env.PIP_ENCODER !== 'software' && process.platform === 'darwin') {
+    try {
+      const out = await run('ffmpeg', ['-hide_banner', '-encoders']);
+      if (/\bh264_videotoolbox\b/.test(out)) hwEnc = 'h264_videotoolbox';
+    } catch { /* остаёмся на процессоре */ }
+  }
+  return hwEnc;
+}
+
+/* videotoolbox не понимает crf, ему нужен битрейт. Берём по высоте кадра
+   с запасом: H.264 менее эффективен, чем HEVC, из которого обычно жмём. */
+function videoArgs(info, plan, useHw) {
+  if (!info.video) return [];
+  if (plan.copyVideo) return ['-c:v', 'copy'];
+  if (!useHw) return ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-pix_fmt', 'yuv420p'];
+  const h = info.video.height || 1080;
+  const kbps = h <= 720 ? 4000 : h <= 1080 ? 8000 : h <= 1440 ? 14000 : 24000;
+  return ['-c:v', 'h264_videotoolbox', '-allow_sw', '1', '-profile:v', 'high',
+          '-b:v', kbps + 'k', '-maxrate', Math.round(kbps * 1.5) + 'k',
+          '-bufsize', kbps * 2 + 'k', '-pix_fmt', 'yuv420p'];
+}
+
 /* ── ffprobe ─────────────────────────────────────────────── */
 const probeCache = new Map();
 async function probe(file) {
@@ -152,7 +181,7 @@ async function evict() {
 /* ── подготовка: один проход, обычный seekable MP4 ───────── */
 const jobs = new Map();   // key -> { progress, error, proc }
 
-function startJob(key, file, info, audioIndex, plan) {
+function startJob(key, file, info, audioIndex, plan, useHw) {
   const part = path.join(CACHE, key + '.part');
   const out = cacheFile(key);
 
@@ -160,11 +189,7 @@ function startJob(key, file, info, audioIndex, plan) {
   if (info.video) args.push('-map', `0:${info.video.index}`);
   if (audioIndex != null) args.push('-map', `0:${audioIndex}`);
   args.push('-sn', '-dn', '-map_metadata', '-1');
-
-  if (info.video) {
-    if (plan.copyVideo) args.push('-c:v', 'copy');
-    else args.push('-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-pix_fmt', 'yuv420p');
-  }
+  args.push(...videoArgs(info, plan, useHw));
   if (audioIndex != null) args.push('-c:a', 'aac', '-b:a', '192k', '-ac', '2', '-ar', '48000');
 
   /* один проход без -ss: видео и звук стыкуются ровно один раз,
@@ -173,12 +198,14 @@ function startJob(key, file, info, audioIndex, plan) {
 
   /* показываем ту же команду, что реально исполняется, но без длинных путей */
   const short = a => a === file ? path.basename(file) : a === part ? path.basename(part) : a;
-  const job = {
-    progress: 0, phase: 'convert', error: null, started: Date.now(),
+  const job = jobs.get(key) || {};
+  Object.assign(job, {
+    progress: 0, phase: 'convert', error: null, started: job.started || Date.now(),
+    hw: !!useHw,
     cmd: 'ffmpeg ' + args.filter(a => a !== '-hide_banner' && a !== '-loglevel'
                                    && a !== 'error' && a !== '-nostdin' && a !== '-y'
                                    && a !== '-progress' && a !== 'pipe:1').map(short).join(' '),
-  };
+  });
   jobs.set(key, job);
 
   const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -207,13 +234,19 @@ function startJob(key, file, info, audioIndex, plan) {
       jobs.delete(key);
       evict().catch(() => {});
       console.log('  готово:', info.name);
-    } else {
-      job.error = (tail.replace(/\s+/g, ' ').trim().slice(0, 300)) || `ffmpeg завершился с кодом ${code}`;
-      job.progress = 0;
-      try { await fsp.unlink(part); } catch {}
-      setTimeout(() => jobs.delete(key), 30000);
-      console.error('  ошибка подготовки:', info.name, job.error);
+      return;
     }
+    try { await fsp.unlink(part); } catch {}
+    /* аппаратный кодировщик спотыкается на нестандартных исходниках —
+       тогда молча повторяем процессором, а не показываем ошибку */
+    if (useHw) {
+      console.log('  videotoolbox не справился, повторяю процессором:', info.name);
+      return startJob(key, file, info, audioIndex, plan, false);
+    }
+    job.error = (tail.replace(/\s+/g, ' ').trim().slice(0, 300)) || `ffmpeg завершился с кодом ${code}`;
+    job.progress = 0;
+    setTimeout(() => jobs.delete(key), 30000);
+    console.error('  ошибка подготовки:', info.name, job.error);
   });
   return job;
 }
@@ -347,7 +380,8 @@ const server = http.createServer(async (req, res) => {
     if (p === '/' || STATIC.has(p)) return serveStatic(res, p);
 
     if (p === '/api/ping') {
-      return json(res, 200, { ok: true, ffmpeg: await checkFfmpeg(), roots: ROOTS, places: places(), cache: CACHE });
+      return json(res, 200, { ok: true, ffmpeg: await checkFfmpeg(), hw: await checkHw(),
+        roots: ROOTS, places: places(), cache: CACHE });
     }
 
     if (p === '/api/ls') {
@@ -396,7 +430,12 @@ const server = http.createServer(async (req, res) => {
       }
 
       let job = jobs.get(key);
-      if (!job) { console.log('  готовлю:', info.name, '· дорожка', a); job = startJob(key, file, info, a, plan); }
+      if (!job) {
+        const hw = plan.copyVideo ? null : await checkHw();
+        console.log('  готовлю:', info.name, '· дорожка', a,
+          plan.copyVideo ? '· видео копируется' : hw ? '· пережатие на ' + hw : '· пережатие процессором');
+        job = startJob(key, file, info, a, plan, hw);
+      }
       if (job.error) return json(res, 200, { state: 'error', error: job.error });
       return json(res, 200, { state: 'working', key, progress: job.progress,
         phase: job.phase, cmd: job.cmd, elapsed: Date.now() - job.started, duration: info.duration });
@@ -467,6 +506,8 @@ server.listen(PORT, '127.0.0.1', async () => {
   console.log('');
   console.log('  PIP Player  ·  http://127.0.0.1:' + PORT);
   console.log('  ffmpeg      ·  ' + (await checkFfmpeg() ? 'найден' : 'НЕ НАЙДЕН'));
+  console.log('  пережатие   ·  ' + (await checkHw() || 'процессором (libx264)')
+    + '   — нужно только для HEVC, H.264 копируется как есть');
   console.log('  кэш         ·  ' + CACHE + '  (лимит ' + (CACHE_LIMIT / 1024 ** 3).toFixed(0) + ' ГБ)');
   console.log('  каталоги    ·  ' + ROOTS.join('  '));
   console.log('');

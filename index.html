@@ -29,6 +29,14 @@
           <div class="titlechip__path" id="titlePath"></div>
         </div>
 
+        <!-- общие настройки плеера -->
+        <div class="menuwrap gear hide-in-pip" id="gearWrap">
+          <button class="rb" id="btnGear" title="Настройки">
+            <svg viewBox="0 0 24 24" class="ico-gear"><path d="M9.91 2.94 L14.09 2.94 L14.19 5.35 L15.15 5.75 L16.93 4.11 L19.89 7.07 L18.25 8.85 L18.65 9.81 L21.06 9.91 L21.06 14.09 L18.65 14.19 L18.25 15.15 L19.89 16.93 L16.93 19.89 L15.15 18.25 L14.19 18.65 L14.09 21.06 L9.91 21.06 L9.81 18.65 L8.85 18.25 L7.07 19.89 L4.11 16.93 L5.75 15.15 L5.35 14.19 L2.94 14.09 L2.94 9.91 L5.35 9.81 L5.75 8.85 L4.11 7.07 L7.07 4.11 L8.85 5.75 L9.81 5.35 Z"/><circle cx="12" cy="12" r="3.1"/></svg>
+          </button>
+          <div class="menu menu--down" id="gearMenu"></div>
+        </div>
+
         <div class="pulse" id="pulse" aria-hidden="true">
           <svg viewBox="0 0 24 24" id="pulseIcon"><path d="M8 5.5v13l10-6.5z"/></svg>
         </div>
@@ -51,8 +59,10 @@
               <span class="spin" aria-hidden="true"></span>
               <span>Готовлю файл для браузера</span>
             </div>
-            <div class="prep__name" id="prepName">—</div>
-            <div class="prep__track" id="prepTrack"></div>
+            <div class="prep__file">
+              <div class="prep__name" id="prepName">—</div>
+              <div class="prep__track" id="prepTrack"></div>
+            </div>
             <ol class="prep__steps" id="prepSteps"></ol>
             <div class="prep__cmd" id="prepCmd"></div>
             <div class="prep__note">Звук перекодируется один раз. Дальше файл играется и перематывается как обычный, а следующая серия готовится фоном.</div>

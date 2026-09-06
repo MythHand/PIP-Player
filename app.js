@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════
-   Nocturne — плеер
+   PIP Player — плеер
    Два режима: чистый file:// и локальный мост на ffmpeg.
    ═══════════════════════════════════════════════════════════ */
 (() => {
@@ -29,6 +29,7 @@ const btnPipMode = $('#btnPipMode'), pipMenu = $('#pipMenu'), pipSeg = $('#pipSe
 const rateMenu = $('#rateMenu');
 const btnAudio = $('#btnAudio'), audioLabel = $('#audioLabel'), audioMenu = $('#audioMenu');
 const btnSubs = $('#btnSubs'), subsMenu = $('#subsMenu');
+const btnGear = $('#btnGear'), gearMenu = $('#gearMenu');
 const queueList = $('#queueList'), queueFiles = $('#queueFiles'), queueTotal = $('#queueTotal');
 const ghostName = $('#ghostName');
 const filePick = $('#filePick'), dirPick = $('#dirPick');
@@ -37,6 +38,45 @@ const browserModal = $('#browserModal'), helpModal = $('#helpModal');
 const brPlaces = $('#brPlaces'), brList = $('#brList'), brPath = $('#brPath');
 const btnDisk = $('#btnDisk'), btnEmptyDisk = $('#btnEmptyDisk');
 
+/* ── настройки плеера ─────────────────────────────────────────
+   Список ниже — единственный источник правды: и стартовые значения,
+   и подписи в шестерёнке, и набор допустимых вариантов берутся отсюда.
+   Раньше умолчания были записаны в одном месте, подписи в другом, а
+   применение раскладки не вызывалось при старте вовсе — из-за этого
+   меню показывало одно, а плеер вёл себя иначе.
+
+   Из localStorage принимаем только значение, которое действительно
+   есть в списке вариантов: чужое, устаревшее или испорченное молча
+   заменяем умолчанием. Ключ версии сбрасывает набор, оставшийся от
+   прежних раскладок настроек. */
+const SETTINGS = [
+  { key: 'queueMode', def: 'overlay', label: 'Панель с файлами',
+    opts: [['overlay', 'Наезжает на видео'], ['docked', 'Сужает видео']] },
+  { key: 'drag', def: 'on', label: 'Изменять порядок файлов',
+    opts: [['on', 'Включено'], ['off', 'Выключено']] },
+  { key: 'hideUi', def: 'off', label: 'Скрывать панель управления при автопереходе',
+    opts: [['on', 'Включено'], ['off', 'Выключено']] },
+];
+const SETTINGS_V = '2';
+
+function loadSettings() {
+  try {
+    if (localStorage.getItem('pip.set.v') !== SETTINGS_V) {
+      for (const s of SETTINGS) localStorage.removeItem('pip.' + s.key);
+      localStorage.removeItem('pip.autoUi');          // ключ прежних версий
+      localStorage.setItem('pip.set.v', SETTINGS_V);
+    }
+  } catch (_) { /* приватный режим — просто возьмём умолчания */ }
+
+  const out = {};
+  for (const s of SETTINGS) {
+    let v = null;
+    try { v = localStorage.getItem('pip.' + s.key); } catch (_) {}
+    out[s.key] = s.opts.some(([val]) => val === v) ? v : s.def;
+  }
+  return out;
+}
+
 /* ── состояние ───────────────────────────────────────────── */
 const state = {
   list: [], current: null,
@@ -44,6 +84,7 @@ const state = {
   autoplay: localStorage.getItem('pip.autoplay') !== '0',
   audioPref: null,   // какую дорожку выбрали руками — перенесём на следующие файлы
   subPref: null,     // то же для субтитров; null означает «выключены»
+  set: loadSettings(),   // общие настройки плеера, см. SETTINGS
   cue: {             // оформление субтитров, всё в пределах того, что умеет ::cue
     size: localStorage.getItem('pip.cue.size') || 'm',
     bg:   localStorage.getItem('pip.cue.bg')   || 'shadow',
@@ -53,7 +94,9 @@ const state = {
   server: null,            // ответ /api/ping либо null
   seekPreview: null,       // показываемая позиция во время перемотки
   browserDir: null,
-  pipMode: localStorage.getItem('nocturne.pipMode') || 'document',
+  pipMode: localStorage.getItem('pip.pipMode')
+        || localStorage.getItem('nocturne.pipMode')   // ключ из ранних версий
+        || 'document',
 };
 
 const MEDIA_EXT = /\.(mp4|m4v|webm|ogv|ogm|mov|mkv|avi|ts|m2ts|mts|mpg|mpeg|3gp|flv|wmv|divx|mp3|m4a|m4b|aac|flac|wav|opus|oga)$/i;
@@ -207,10 +250,15 @@ async function ensureReady(it) {
   }
 }
 
-/* следующий файл готовится, пока смотрим текущий */
-function prefetchNext() {
+/* Следующий файл готовится, пока смотрим текущий. Сначала разбираем его
+   дорожки: без этого мост взял бы дорожку по умолчанию и целый проход
+   ушёл бы впустую, если выбор перенесён с прошлого файла. */
+async function prefetchNext() {
   const nx = state.list[idxOf(cur()) + 1];
-  if (nx && nx.kind === 'server') fetch('/api/prepare?' + prepareQuery(nx)).catch(() => {});
+  if (!nx || nx.kind !== 'server') return;
+  await probeItem(nx);
+  resolveTracks(nx);
+  fetch('/api/prepare?' + prepareQuery(nx)).catch(() => {});
 }
 
 async function sourceFor(it) {
@@ -218,6 +266,7 @@ async function sourceFor(it) {
   /* дорожку выбираем ДО подготовки: иначе мост потратит целый проход
      на дорожку по умолчанию, а нужна перенесённая с прошлого файла */
   await probeItem(it);
+  resolveTracks(it);
   if (it.carried) {
     it.carried = false;
     const t = (it.tracks || []).find(x => x.index === it.audioIndex);
@@ -262,7 +311,8 @@ function addServerFiles(entries) {
     state.list.push({
       id: ++state.seq, kind: 'server', name: e.name, path: e.path,
       size: e.size || 0, dur: null, err: false, tracks: null, audioIndex: null,
-      subs: null, subIndex: undefined, probed: false,
+      subs: null, subIndex: null, probed: false,
+      audioPicked: false, subPicked: false,
     });
   }
   render(); probeServer();
@@ -319,9 +369,13 @@ function preferredTrack(it) {
   return byLang ? byLang.index : null;
 }
 
-/* ── ffprobe для серверных файлов ────────────────────────── */
+/* ── ffprobe для серверных файлов ─────────────────────────────
+   Здесь только чтение файла. Выбор дорожек сюда не входит намеренно:
+   см. resolveTracks. */
 async function probeItem(it) {
   if (it.probed) return;
+  if (it.probing) return it.probing;        // разбор уже идёт — ждём его
+  it.probing = (async () => {
   try {
     const r = await fetch('/api/probe?path=' + encodeURIComponent(it.path));
     if (r.ok) {
@@ -331,15 +385,34 @@ async function probeItem(it) {
       it.defaultAudio = info.defaultAudio;
       it.videoCodec = info.video ? info.video.codec : null;
       it.subs = info.subs || [];
-      if (it.subIndex === undefined) it.subIndex = preferredSub(it);
-      if (it.audioIndex == null) {
-        const want = preferredTrack(it);
-        it.audioIndex = want != null ? want : info.defaultAudio;
-        it.carried = want != null && want !== info.defaultAudio;
-      }
     }
   } catch (_) { /* сервер мог уйти — не страшно */ }
   it.probed = true;
+  })();
+  await it.probing;
+  it.probing = null;
+}
+
+/* ── какая дорожка играет ─────────────────────────────────────
+   Разбор файла и выбор дорожки — разные вещи, и раньше они были слиты
+   в probeItem. Очередь разбирается целиком сразу после добавления, то
+   есть каждому файлу выбор проставлялся ещё до того, как пользователь
+   его сделал; дальше стоял флаг probed, и перенос выбора на следующие
+   серии не срабатывал уже никогда — плеер держался за то, что решил
+   в момент добавления.
+
+   Поэтому выбор пересчитывается перед каждым воспроизведением и
+   закрепляется за файлом только тогда, когда его задали руками. */
+function resolveTracks(it) {
+  if (!it || it.kind !== 'server' || !it.probed) return;
+
+  if (!it.audioPicked) {
+    const want = preferredTrack(it);
+    const pick = want != null ? want : it.defaultAudio;
+    it.carried = want != null && want !== it.defaultAudio && want !== it.audioIndex;
+    it.audioIndex = pick;
+  }
+  if (!it.subPicked) it.subIndex = preferredSub(it);
 }
 
 let probingServer = false;
@@ -351,16 +424,8 @@ async function probeServer() {
   await probeItem(it);
   probingServer = false;
   paintMeta();
-  if (it === cur()) { syncAudioButton(); syncSubsButton(); }
+  if (it === cur()) { resolveTracks(it); syncAudioButton(); syncSubsButton(); }
   probeServer();
-}
-
-function setSrc(it, src) {
-  const playing = !video.paused;
-  it.loadedSrc = src;
-  video.src = src;
-  video.load();
-  if (playing) video.play().catch(() => {});
 }
 
 /* ═══════════════ передача локальных файлов мосту ═══════════════
@@ -416,9 +481,29 @@ function upgradeItem(it, hit) {
   it.size = hit.size || it.size;
   it.probed = false;
   it.audioIndex = null;
+  it.audioPicked = false;
+  it.subIndex = null;
+  it.subPicked = false;
   it.err = false;
   it.file = null;
   it.loadedSrc = null;
+}
+
+/* ── смена кадра ──────────────────────────────────────────────
+   Уход в чёрный — 0.22 с, появление нового кадра — 0.32 с. Проявляем
+   не по таймеру, а когда первый кадр реально доступен: подготовка файла
+   может занять минуту, и угаданная задержка тут не годится. */
+let fadeTok = 0;
+
+function fadeOut() {
+  fadeTok++;
+  stage.classList.add('fading');
+  return sleep(220);
+}
+
+function fadeIn() {
+  const tok = fadeTok;
+  return () => { if (tok === fadeTok) stage.classList.remove('fading'); };
 }
 
 /* ═══════════════ воспроизведение ═══════════════ */
@@ -437,15 +522,23 @@ async function playItem(it, autoplay = true) {
   titlePath.textContent = folderOf(it);
   ghostName.textContent = it.name;
   if (state.pipWin) state.pipWin.document.title = it.name;
-  render(); syncAudioButton(); syncStatus(); mediaMeta(it); poke();
+  render(); syncAudioButton(); syncStatus(); mediaMeta(it);
+  deckShow(false);
 
   const token = ++playToken;
+  const faded = fadeOut();
   const src = await sourceFor(it);
-  if (token !== playToken || it !== cur() || !src) return;
+  const reveal = fadeIn();
+  if (token !== playToken || it !== cur() || !src) { autoSwitch = false; reveal(); return; }
+
+  await faded;                       // даём затемнению доиграть
+  if (token !== playToken || it !== cur()) return;
 
   it.loadedSrc = src;
   video.src = src;
   video.load();
+  video.addEventListener('loadeddata', reveal, { once: true });
+  setTimeout(reveal, 4000);          // страховка, если кадр так и не приедет
   if (autoplay) video.play().catch(() => toast('Нажмите play — браузер ждёт действия'));
   syncAudioButton(); syncSubsButton(); applySubs(it);
   armAudioCheck(); prefetchNext();
@@ -463,6 +556,7 @@ async function switchTrack(it) {
   video.addEventListener('loadedmetadata', () => { video.currentTime = at; }, { once: true });
   if (playing) video.play().catch(() => {});
   syncAudioButton(); syncSubsButton(); applySubs(it);
+  prefetchNext();          // следующий файл готовим уже с новым выбором
 }
 
 function next(auto = false) {
@@ -487,7 +581,8 @@ function endOfQueue() {
   const total = state.list.reduce((a, b) => a + (b.dur || 0), 0);
   endMeta.textContent = `${state.list.length} ${plural(state.list.length, 'файл', 'файла', 'файлов')} · ${fmtLong(total)}`;
   endCard.classList.add('show');
-  stage.classList.remove('idle');
+  autoSwitch = false;        // переходов больше не будет
+  deckShow(true);
 }
 function plural(n, a, b, c) {
   const m = n % 100, k = n % 10;
@@ -519,8 +614,17 @@ function pulse(playing) {
   pulseEl.classList.remove('go'); void pulseEl.offsetWidth; pulseEl.classList.add('go');
 }
 
-/* ── автоскрытие панели ──────────────────────────────────── */
-let hideT, overDeck = false;
+/* ── видимость панели управления ──────────────────────────────
+   Правило одно и живёт здесь. Раньше оно было размазано по playItem,
+   next, play, pause и ended, и каждая правка одного случая ломала
+   остальные.
+
+   autoSwitch поднят на время автоматического перехода между файлами:
+   пока он поднят и настройка велит скрывать, панель не разворачивается
+   ни по одному поводу изнутри плеера. Действия пользователя — движение
+   мыши, клавиши — показывают её всегда. */
+let hideT, overDeck = false, autoSwitch = false;
+
 function poke() {
   stage.classList.remove('idle', 'cursor-hidden');
   clearTimeout(hideT);
@@ -530,16 +634,26 @@ function poke() {
     stage.classList.add('idle', 'cursor-hidden');
   }, 2600);
 }
+
+/* показ по инициативе плеера: подчиняется автопереходу */
+function deckShow(persist) {
+  if (autoSwitch && state.set.hideUi === 'on') return;
+  if (persist) { stage.classList.remove('idle', 'cursor-hidden'); clearTimeout(hideT); }
+  else poke();
+}
+
 stage.addEventListener('pointermove', poke);
 deck.addEventListener('pointerenter', () => { overDeck = true; });
 deck.addEventListener('pointerleave', () => { overDeck = false; poke(); });
 
+const queueOverlays = () => state.set.queueMode === 'overlay';
 let clickT = null, justClosedQueue = 0;
 video.addEventListener('click', e => {
   e.preventDefault();
-  /* открытая очередь закрывается первым же кликом по кадру — сразу,
-     без ожидания двойного, и не трогая воспроизведение */
-  if (state.queueOpen && !state.pipWin) {
+  /* Клик по кадру убирает панель с файлами, только когда она этот кадр
+     перекрывает. В режиме, где она сужает видео, перекрытия нет —
+     и клик работает как обычно, ставит на паузу. */
+  if (state.queueOpen && !state.pipWin && queueOverlays()) {
     clearTimeout(clickT); clickT = null;
     justClosedQueue = Date.now();
     toggleQueue(false);
@@ -551,7 +665,7 @@ video.addEventListener('click', e => {
 });
 video.addEventListener('dblclick', e => {
   e.preventDefault(); clearTimeout(clickT); clickT = null;
-  if (Date.now() - justClosedQueue < 400) return;   // второй клик закрытия — не полный экран
+  if (queueOverlays() && Date.now() - justClosedQueue < 400) return;   // второй клик закрытия — не полный экран
   if (!state.pipWin) toggleFull();
 });
 
@@ -718,6 +832,8 @@ function pickAudio(opt) {
   }
   if (it.audioIndex === opt.id) return;
   it.audioIndex = opt.id;
+  it.audioPicked = true;          // для этого файла выбор задан руками
+  it.carried = false;
   rememberTrack(it, opt.id);
   hideNotice();
   toast('Дорожка: ' + opt.main);
@@ -755,15 +871,18 @@ function syncSubsButton() {
   if (!opts.length) subsMenu.classList.remove('open');
 }
 
+/* Меню в две колонки: слева дорожки, справа оформление. Списки живут
+   независимо — дорожек может быть много, настроек всегда три, — поэтому
+   и прокрутка у каждой колонки своя. Вторая колонка появляется только
+   когда есть что оформлять: у растровых субтитров стилей нет. */
 function buildSubsMenu() {
   const opts = subOptions();
+  const styleable = opts.some(o => o.text);
   subsMenu.replaceChildren();
-  const head = document.createElement('div');
-  head.className = 'menu__title';
-  head.textContent = 'Субтитры';
-  subsMenu.append(head);
+  subsMenu.classList.toggle('menu--split', styleable);
 
   if (!opts.length) {
+    menuTitle(subsMenu, 'Субтитры');
     const e = document.createElement('div');
     e.className = 'menu__empty';
     e.textContent = state.server ? 'В этом файле нет субтитров.'
@@ -771,6 +890,10 @@ function buildSubsMenu() {
     subsMenu.append(e);
     return;
   }
+
+  const list = document.createElement('div');
+  list.className = 'menu__col';
+  menuTitle(list, 'Субтитры');
 
   const row = (main, sub, sel, off, disabled) => {
     const b = document.createElement('button');
@@ -781,18 +904,27 @@ function buildSubsMenu() {
     b.querySelector('.menu__main').textContent = main;
     if (sub) b.querySelector('.menu__sub').textContent = sub;
     b.onclick = () => { if (!disabled) { pickSub(off); subsMenu.classList.remove('open'); } };
-    subsMenu.append(b);
+    list.append(b);
   };
 
   row('Выключены', '', cur().subIndex == null, null, false);
   for (const o of opts) row(o.main, o.sub, o.sel, o, !o.text);
-  if (opts.some(o => o.text)) appendCueControls();
+  subsMenu.append(list);
+
+  if (!styleable) return;
+
+  const side = document.createElement('div');
+  side.className = 'menu__col menu__col--side';
+  menuTitle(side, 'Оформление');
+  for (const r of CUE_UI) segRow(side, r.label, state.cue[r.key], r.opts, val => setCue(r.key, val));
+  subsMenu.append(side);
 }
 
 function pickSub(opt) {
   const it = cur();
   if (!it) return;
   it.subIndex = opt ? opt.id : null;
+  it.subPicked = true;            // для этого файла выбор задан руками
   state.subPref = opt ? { sig: subSig(it.subs), order: (it.subs.find(x => x.index === opt.id) || {}).order,
                           lang: (it.subs.find(x => x.index === opt.id) || {}).lang,
                           title: (it.subs.find(x => x.index === opt.id) || {}).title }
@@ -884,34 +1016,63 @@ function setCue(key, val) {
   buildSubsMenu();
 }
 
-function appendCueControls() {
-  const sep = document.createElement('div');
-  sep.className = 'menu__sep';
-  subsMenu.append(sep);
+/* Подпись сверху, варианты под ней во всю ширину: в строку они
+   не помещались и налезали друг на друга. */
+function segRow(menu, label, current, opts, pick) {
+  const line = document.createElement('div');
+  line.className = 'menu__row';
+  const lab = document.createElement('span');
+  lab.className = 'menu__rowlabel';
+  lab.textContent = label;
+  const group = document.createElement('div');
+  group.className = 'seg2';
+  for (const [val, text] of opts) {
+    const b = document.createElement('button');
+    b.textContent = text;
+    b.className = current === val ? 'sel' : '';
+    b.onclick = ev => { ev.stopPropagation(); pick(val); };
+    group.append(b);
+  }
+  line.append(lab, group);
+  menu.append(line);
+}
 
-  const head = document.createElement('div');
-  head.className = 'menu__title';
-  head.textContent = 'Оформление';
-  subsMenu.append(head);
+function menuTitle(menu, text) {
+  const d = document.createElement('div');
+  d.className = 'menu__title';
+  d.textContent = text;
+  menu.append(d);
+}
 
-  for (const row of CUE_UI) {
-    const line = document.createElement('div');
-    line.className = 'menu__row';
-    const lab = document.createElement('span');
-    lab.textContent = row.label;
-    const group = document.createElement('div');
-    group.className = 'seg2';
-    for (const [val, text] of row.opts) {
-      const b = document.createElement('button');
-      b.textContent = text;
-      b.className = state.cue[row.key] === val ? 'sel' : '';
-      b.onclick = ev => { ev.stopPropagation(); setCue(row.key, val); };
-      group.append(b);
-    }
-    line.append(lab, group);
-    subsMenu.append(line);
+/* ═══════════════ общие настройки ═══════════════
+   Единственное место, где настройки превращаются в поведение. Вызывать
+   обязательно и при старте тоже — иначе сохранённое значение живёт
+   только в меню. */
+function applySettings() {
+  workspace.classList.toggle('queue-docked', state.set.queueMode === 'docked');
+  queueList.classList.toggle('no-drag', state.set.drag === 'off');
+  for (const li of queueList.children) li.draggable = state.set.drag === 'on';
+}
+
+function buildGearMenu() {
+  gearMenu.replaceChildren();
+  menuTitle(gearMenu, 'Настройки плеера');
+  for (const row of SETTINGS) {
+    segRow(gearMenu, row.label, state.set[row.key], row.opts, val => {
+      state.set[row.key] = val;
+      try { localStorage.setItem('pip.' + row.key, val); } catch (_) {}
+      applySettings();
+      buildGearMenu();
+    });
   }
 }
+
+btnGear.onclick = e => {
+  e.stopPropagation();
+  buildGearMenu();
+  closeMenus(gearMenu);
+  gearMenu.classList.toggle('open');
+};
 
 btnSubs.onclick = e => {
   e.stopPropagation();
@@ -921,10 +1082,10 @@ btnSubs.onclick = e => {
 };
 
 function closeMenus(except) {
-  for (const m of [audioMenu, pipMenu, rateMenu, subsMenu]) if (m && m !== except) m.classList.remove('open');
+  for (const m of [audioMenu, pipMenu, rateMenu, subsMenu, gearMenu]) if (m && m !== except) m.classList.remove('open');
 }
 function anyMenuOpen() {
-  return [audioMenu, pipMenu, rateMenu, subsMenu].some(m => m && m.classList.contains('open'));
+  return [audioMenu, pipMenu, rateMenu, subsMenu, gearMenu].some(m => m && m.classList.contains('open'));
 }
 btnAudio.onclick = e => {
   e.stopPropagation();
@@ -985,7 +1146,7 @@ function render() {
     const li = document.createElement('li');
     li.className = 'item' + (it === cur() ? ' active' : '') + (it.err ? ' bad' : '');
     if (it === cur() && !video.paused) li.classList.add('playing');
-    li.draggable = true;
+    li.draggable = state.set.drag === 'on';
     li.dataset.id = it.id;
     li.innerHTML =
       `<span class="item__grip">${svg('<path d="M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01" stroke-width="2.4"/>')}</span>` +
@@ -1045,6 +1206,7 @@ function removeItem(it) {
     const nx = state.list[i] || state.list[i - 1] || null;
     if (nx) playItem(nx);
     else { state.current = null; playToken++; hideProgress();
+           stage.classList.remove('fading');
            video.pause(); video.removeAttribute('src'); video.load(); }
   }
   render();
@@ -1065,17 +1227,24 @@ function flipMove(mutate) {
   const kids = [...queueList.children];
   const before = new Map(kids.map(k => [k, k.getBoundingClientRect().top]));
   mutate();
+
+  /* Сначала ЧИТАЕМ все новые позиции, потом ПИШЕМ все сдвиги. Если
+     перемешать, браузер пересчитывает раскладку на каждой строке —
+     это и есть Forced reflow, из-за которого консоль сыплет warning. */
+  const shift = [];
   for (const k of queueList.children) {
     const was = before.get(k);
     if (was == null) continue;
     const delta = was - k.getBoundingClientRect().top;
-    if (!delta) continue;
+    if (delta) shift.push([k, delta]);
+  }
+  for (const [k, delta] of shift) {
     k.style.transition = 'none';
     k.style.transform = `translateY(${delta}px)`;
   }
+
   requestAnimationFrame(() => {
-    for (const k of queueList.children) {
-      if (!k.style.transform) continue;
+    for (const [k] of shift) {
       k.style.transition = 'transform 240ms cubic-bezier(.22,.8,.24,1)';
       k.style.transform = '';
     }
@@ -1139,7 +1308,9 @@ $('#btnClear').onclick = () => {
   state.list.forEach(i => i.url && URL.revokeObjectURL(i.url));
   state.list = []; state.current = null;
   video.pause(); video.removeAttribute('src'); video.load();
-  endCard.classList.remove('show'); hideNotice(); hideProgress(); render();
+  endCard.classList.remove('show'); hideNotice(); hideProgress();
+  stage.classList.remove('fading');
+  render();
 };
 
 function toggleQueue(force) {
@@ -1211,7 +1382,7 @@ function buildPipMenu() {
     b.onclick = () => {
       if (disabled) return;
       state.pipMode = m.id;
-      localStorage.setItem('nocturne.pipMode', m.id);
+      localStorage.setItem('pip.pipMode', m.id);
       pipMenu.classList.remove('open');
       toast('Режим PiP: ' + m.main.toLowerCase());
       if (state.pipWin) state.pipWin.close();
@@ -1246,7 +1417,6 @@ async function openDocPip() {
   win.document.title = cur() ? cur().name : 'PIP Player';
   win.document.body.classList.add('pip-body');
   stage.classList.add('pip-mode');
-  stage.classList.remove('idle');
   win.document.body.append(stage);
   stageHost.classList.add('is-pip');
   pipSeg.classList.add('on');
@@ -1289,8 +1459,7 @@ if ('mediaSession' in navigator) {
   set('seekto', d => { if (d && d.seekTime != null) seekTo(d.seekTime); });
 }
 
-/* Нативное окно PiP рисует шкалу по этим значениям. Для перекодируемого
-   потока video.duration — лишь остаток, поэтому сообщаем свои цифры. */
+/* Нативное окно PiP рисует по этим значениям свою шкалу перемотки. */
 let posStateT = 0;
 function updatePositionState() {
   if (!('mediaSession' in navigator) || !navigator.mediaSession.setPositionState) return;
@@ -1312,13 +1481,17 @@ function updatePositionState() {
 video.addEventListener('play', () => {
   playIcon.innerHTML = '<path d="M8 5h3.2v14H8zM12.8 5H16v14h-3.2z"/>';
   btnPlay.title = 'Пауза · Пробел';
-  pulse(true); syncStatus(); markPlaying(true); poke(); armAudioCheck();
+  pulse(true); syncStatus(); markPlaying(true); armAudioCheck();
+  deckShow(false);
 });
 video.addEventListener('pause', () => {
   playIcon.innerHTML = '<path d="M8 5.5v13l10-6.5z"/>';
   btnPlay.title = 'Смотреть · Пробел';
   pulse(false); syncStatus(); markPlaying(false);
-  stage.classList.remove('idle', 'cursor-hidden');
+  /* В конце файла браузер шлёт pause ПЕРЕД ended, и это не остановка
+     по воле пользователя. Решение принимает обработчик ended. */
+  if (video.ended) return;
+  deckShow(true);
 });
 video.addEventListener('timeupdate', () => { paintSeek(); updatePositionState(); });
 video.addEventListener('progress', paintSeek);
@@ -1333,15 +1506,26 @@ video.addEventListener('volumechange', paintVolume);
 video.addEventListener('ratechange', () => {
   btnRate.textContent = (video.playbackRate % 1 ? video.playbackRate : video.playbackRate.toFixed(0)) + '×';
 });
-video.addEventListener('playing', () => { state.errStreak = 0; state.seekPreview = null; syncStatus(); });
+video.addEventListener('playing', () => {
+  state.errStreak = 0; state.seekPreview = null; autoSwitch = false; syncStatus();
+});
 video.addEventListener('ended', () => {
   /* повтор одного файла работает и при выключенном автопереходе:
      это явно заданный режим, а не автоматика */
-  if (state.loop !== 'one' && !state.autoplay) { toast('Автопереход выключен'); return; }
+  const advancing = state.loop === 'one' || state.autoplay;
+  if (!advancing) {
+    autoSwitch = false;
+    deckShow(true);          // дальше ничего не будет — панель нужна
+    toast('Автопереход выключен');
+    return;
+  }
+  /* панель была скрыта — значит и оставляем скрытой */
+  autoSwitch = stage.classList.contains('idle');
   next(true);
 });
 
 video.addEventListener('error', () => {
+  stage.classList.remove('fading');
   const it = cur();
   if (!it || !video.getAttribute('src')) return;
   it.err = true;
@@ -1563,7 +1747,8 @@ function onKey(e) {
     case 'Home': e.preventDefault(); seekTo(0); break;
     case 'End':  e.preventDefault(); seekTo(duration() - 2); break;
     case 'Escape':
-      if (state.pipWin) state.pipWin.close();
+      if (anyMenuOpen()) closeMenus();
+      else if (state.pipWin) state.pipWin.close();
       else if (state.queueOpen) toggleQueue(false);
       break;
     default:
@@ -1592,6 +1777,7 @@ async function detectServer() {
 
 (async function boot() {
   video.volume = 1;
+  applySettings();
   paintVolume(); paintSeek(); paintLoop(); paintAuto(); applyCueStyle(); render();
   btnAudio.hidden = true;
   btnSubs.hidden = true;
