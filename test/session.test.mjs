@@ -53,6 +53,15 @@ const SCRIPT = `
     hasSource: !!$('#video').getAttribute('src'),
     volume: $('#video').volume,
   };
+  /* the frame box of each row and, on the file left in the middle, the
+     bar showing where; the durations come with the probe */
+  await until(() => rows[0].classList.contains('has-pos'), 100);
+  out.rows = rows.map(r => ({
+    frame: !!r.querySelector('.item__thumb'),
+    pos: Number(r.style.getPropertyValue('--pos') || 0),
+    bar: getComputedStyle(r.querySelector('.pos')).display !== 'none',
+  }));
+  out.locate = !$('#btnLocate').hidden;
 
   out.mode = {
     diskShown: !$('#btnEmptyDisk').hidden,
@@ -75,7 +84,7 @@ const SCRIPT = `
     src: (v.getAttribute('src') || '').replace(/key=[a-f0-9]+/, 'key=…'),
     duration: Math.round(v.duration),
     resumedTo: Math.round(v.currentTime),
-    deckShown: !$('#stage').classList.contains('empty'),
+    deckShown: !$('#stage').classList.contains('is-empty'),
   };
 
   /* ── the audio tracks of a real file ── */
@@ -94,6 +103,23 @@ const SCRIPT = `
   };
   $('#btnAudio').click();
   await window.__settled();
+
+  /* ── the deck next to the open queue ──
+     1280 with the queue docked, the window this test runs in, is where
+     the sides ran over the centre: next and mute overlapped by 22px. */
+  window.__step('deck');
+  const deckHits = () => {
+    const shown = [...document.querySelectorAll('#deck button')].filter(b => b.offsetParent);
+    const hits = [];
+    for (let i = 0; i < shown.length; i++) for (let j = i + 1; j < shown.length; j++) {
+      const a = shown[i].getBoundingClientRect(), b = shown[j].getBoundingClientRect();
+      if (a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1)
+        hits.push(shown[i].id + '/' + shown[j].id);
+    }
+    return { shown: shown.map(b => b.id), hits,
+             label: getComputedStyle($('#audioLabel')).display !== 'none' };
+  };
+  out.deck = { packed: $('#deck').classList.contains('deck--packed'), ...deckHits() };
 
   /* ── icons: the queue is chrome, the deck is the main control ── */
   window.__step('icons');
@@ -154,6 +180,8 @@ const SCRIPT = `
     stage.style.left = '0'; stage.style.top = '0';
     stage.style.width = width + 'px'; stage.style.height = '340px';
     await window.__settled();
+    out.pipDeck = out.pipDeck || {};
+    out.pipDeck[width] = deckHits();
     $('#btnSubs').click();
     await window.__settled();
     out.pip[width] = measureSubs();
@@ -170,6 +198,15 @@ const SCRIPT = `
   $('#btnGear').click();
   await until(() => $('.cache__bar') && $('.cache__bar').getAttribute('aria-valuenow'));
   const cbar = $('.cache__bar');
+  /* a still pointer puts the stage to sleep and the gear stops taking
+     the pointer, which hit testing would read as the menu being under
+     the queue; a hand over the menu keeps it awake */
+  $('#stage').dispatchEvent(new PointerEvent('pointermove', { bubbles: true }));
+  { const g = rect($('#gearMenu')), q = rect($('#queue'));
+    const top = document.elementFromPoint(q.x + q.w - 20, g.y + 60);
+    out.gear = { left: g.x, right: g.x + g.w, width: g.w, window: innerWidth,
+                 overQueue: g.x < q.x + q.w, onTop: !!(top && top.closest('#gearMenu')),
+                 columns: getComputedStyle($('#gearMenu')).flexDirection }; }
   const railW = $('.cache__rail').getBoundingClientRect().width;
   const leftOf = el => el.getBoundingClientRect().left - $('.cache__rail').getBoundingClientRect().left;
   const knob = $('.cache__knob');
@@ -205,6 +242,20 @@ const SCRIPT = `
     session: JSON.parse(localStorage.getItem('pip.session') || 'null'),
     pos: JSON.parse(localStorage.getItem('pip.pos') || 'null'),
   };
+
+  /* ── how each file reaches the player, and the end of the queue ──
+     The end is played out by the event rather than by the clock: two
+     real seconds of video are not worth the wait, and what is under
+     test is what the player does once the last file has ended. */
+  window.__step('end');
+  const metaOf = i => document.querySelectorAll('.item')[i].querySelector('.item__meta').textContent;
+  out.badges = { mkv: metaOf(0), mp4: metaOf(1) };
+  document.querySelectorAll('.item')[1].querySelector('.item__body').click();
+  await until(() => /api\\/raw/.test(v.getAttribute('src') || '') && v.duration > 0, 400);
+  v.dispatchEvent(new Event('ended'));
+  await window.__settled();
+  out.end = { src: (v.getAttribute('src') || '').slice(0, 12),
+              shown: $('#endCard').classList.contains('show'), meta: $('#endMeta').textContent };
 
   window.__report(out);
 `;
@@ -252,6 +303,17 @@ describe('the queue of the previous session', { skip }, () => {
   test('opening a tab does not start a conversion', () => {
     assert.equal(R.restored.hasSource, false,
       'a source at boot means ffmpeg was told to work before anyone pressed play');
+  });
+
+  test('each row has a frame box, and the file left in the middle shows where', () => {
+    assert.ok(R.rows.every(r => r.frame));
+    assert.equal(R.rows[0].bar, true);
+    assert.ok(Math.abs(R.rows[0].pos - RESUME_AT / 180) < 0.01, 'at ' + R.rows[0].pos);
+    assert.equal(R.rows[1].bar, false, 'nothing kept for the other file, so no bar');
+  });
+
+  test('the button that finds the file playing is offered', () => {
+    assert.equal(R.locate, true);
   });
 
   test('the volume is the one that was set last time', () => {
@@ -325,6 +387,45 @@ describe('the subtitle menu', { skip }, () => {
   });
 });
 
+describe('the deck next to the open queue', { skip }, () => {
+  test('no two buttons overlap', () => {
+    assert.deepEqual(R.deck.hits, []);
+  });
+
+  test('speed, repeat and auto-advance fold into the gear', () => {
+    assert.equal(R.deck.packed, true);
+    assert.ok(R.deck.shown.includes('btnPack'));
+    for (const id of ['btnRate', 'btnLoop', 'btnAuto'])
+      assert.ok(!R.deck.shown.includes(id), id + ' is still in the row');
+  });
+});
+
+describe('the menus next to the open queue', { skip }, () => {
+  test('the subtitle menu stays inside the window', () => {
+    assert.ok(R.subs.pastRight <= 0, `it hangs ${R.subs.pastRight}px past the right edge`);
+    assert.ok(R.subs.pastLeft <= 0, `it hangs ${R.subs.pastLeft}px past the left edge`);
+  });
+
+  test('the gear menu opens whole, over the queue', () => {
+    assert.equal(R.gear.columns, 'row', 'all three columns side by side');
+    assert.ok(R.gear.overQueue, 'at 1280 it reaches over the queue');
+    assert.ok(R.gear.onTop, 'and there it is on top, not under the queue');
+    assert.ok(R.gear.left >= 0 && R.gear.right <= R.gear.window, 'inside the window');
+  });
+});
+
+describe('the deck inside the floating window', { skip }, () => {
+  for (const width of [600, 380, 320]) {
+    test(`at ${width}px the right side holds the volume and the way out only`, () => {
+      const d = R.pipDeck[width];
+      assert.deepEqual(d.hits, []);
+      assert.deepEqual(d.shown.filter(id => ['btnMute', 'btnPip', 'btnPack', 'btnRate',
+        'btnLoop', 'btnAuto', 'btnFull'].includes(id)), ['btnMute', 'btnPip']);
+      assert.equal(d.label, false, 'the track button is the icon alone');
+    });
+  }
+});
+
 describe('the menu inside the floating window', { skip }, () => {
   for (const width of [600, 380, 320]) {
     test(`at ${width}px the columns stack instead of painting over each other`, () => {
@@ -342,6 +443,25 @@ describe('the menu inside the floating window', { skip }, () => {
       assert.ok(m.pastLeft <= 0, `it hangs ${m.pastLeft}px past the left edge`);
     });
   }
+});
+
+describe('how a file reaches the player', { skip }, () => {
+  test('an MKV goes through ffmpeg', () => {
+    assert.match(R.badges.mkv, /through ffmpeg/);
+  });
+
+  test('an MP4 the browser plays is marked direct', () => {
+    assert.match(R.badges.mp4, /direct/);
+    assert.doesNotMatch(R.badges.mp4, /through ffmpeg/);
+  });
+});
+
+describe('the end of the queue', { skip }, () => {
+  test('after the last file the card with the summary appears', () => {
+    assert.equal(R.end.src, '/api/raw?pat', 'the last file was opened before it ended');
+    assert.equal(R.end.shown, true);
+    assert.match(R.end.meta, /^2 files/);
+  });
 });
 
 describe('the cache bar', { skip }, () => {
@@ -397,5 +517,56 @@ describe('what is written down', { skip }, () => {
 
   test('the position is kept per file', () => {
     assert.equal(typeof R.stored.pos, 'object');
+  });
+});
+
+/* A dropped file. It starts playing from the browser's copy at once,
+   while the server looks for it on disk; found, it is handed over. The
+   search answers within the 0.22 s fade, and the start it overtook used
+   to give up without bringing the picture back: the video stayed dark
+   and paused. The page builds a file with the name and size of a
+   fixture and feeds it through the file picker, the way a drop does. */
+let D;
+describe('a dropped file handed over to the server', { skip }, () => {
+  before(async () => {
+    const DROP = `
+      await window.__settled();
+      const $ = s => document.querySelector(s);
+      const until = async (ok, tries = 400) => {
+        for (let i = 0; i < tries && !ok(); i++) await window.__settled();
+        return ok();
+      };
+      window.__step('build');
+      const blob = await (await fetch('/api/raw?path=' + encodeURIComponent(${JSON.stringify('__NATIVE__')}))).blob();
+      const dt = new DataTransfer();
+      dt.items.add(new File([blob], 'native.mp4', { type: 'video/mp4' }));
+      const pick = $('#filePick');
+      pick.files = dt.files;
+      window.__step('drop');
+      pick.dispatchEvent(new Event('change', { bubbles: true }));
+      const v = $('#video');
+      await until(() => /api\\/raw/.test(v.getAttribute('src') || '') && v.readyState >= 2, 120);
+      await until(() => !$('#stage').classList.contains('fading') && !v.paused, 60);
+      window.__step('seen ' + (v.getAttribute('src') || 'none').slice(0, 20) + ' rs' + v.readyState + ' items ' + document.querySelectorAll('.item').length);
+      window.__report({
+        errors: window.__errors.slice(),
+        src: (v.getAttribute('src') || '').slice(0, 12),
+        dark: $('#stage').classList.contains('fading'),
+        paused: v.paused,
+      });
+    `;
+    D = await openServed('drop', DROP.replace('__NATIVE__', media.native), {
+      port: 8783, root: media.dir, width: 1280, height: 800, budget: 20000,
+      seed: { 'pip.set.v': '5' },
+    });
+    if (D.fatal) throw new Error('the page script broke:\n' + D.fatal);
+    if (D.stalled) throw new Error('the page script stopped at: ' + D.stalled);
+  }, { timeout: 120000 });
+
+  test('it ends up playing through the server, with the picture shown', () => {
+    assert.deepEqual(D.errors, []);
+    assert.equal(D.src, '/api/raw?pat', 'the server found it and serves it');
+    assert.equal(D.dark, false, 'the picture came back after the fade');
+    assert.equal(D.paused, false, 'and it plays, as a dropped file should');
   });
 });

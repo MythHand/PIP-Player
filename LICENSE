@@ -20,3 +20,13 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+The MIT License above covers the code of this project. It does not cover
+the MythHand name, logo, mark and avatar: the files assets/logo.svg,
+assets/symbol.svg and assets/avatar.svg, and the same drawings built into
+index.html and app.js. All rights to them are reserved by MythHand. They
+may not be used, copied or modified, in a copy of this project or
+anywhere else, without written permission from MythHand. Naming MythHand
+as the origin of the code is allowed.

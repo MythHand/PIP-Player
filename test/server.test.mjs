@@ -157,6 +157,11 @@ describe('what may be read', { skip: !ffmpeg && 'no ffmpeg' }, () => {
     const r = await get('/api/raw?path=/etc/hosts');
     assert.equal(r.status, 403);
   });
+
+  test('inside the roots a file that is not media is not served either', async () => {
+    const r = await get(`/api/raw?path=${q(media.subs)}`);
+    assert.equal(r.status, 403, 'the subtitle file lies right next to the episodes');
+  });
 });
 
 describe('probing a file', { skip: !ffmpeg && 'no ffmpeg' }, () => {
@@ -189,6 +194,10 @@ describe('probing a file', { skip: !ffmpeg && 'no ffmpeg' }, () => {
   test('an old container has to be re-encoded', async () => {
     const p = await json(`/api/probe?path=${q(media.legacy)}`);
     assert.equal(p.plan.copyVideo, false);
+  });
+
+  test('a file that is not media is not probed', async () => {
+    assert.equal((await get(`/api/probe?path=${q(media.subs)}`)).status, 403);
   });
 });
 

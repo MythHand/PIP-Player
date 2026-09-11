@@ -218,7 +218,13 @@ export async function openServed(name, script, { port = 8782, root, warm = [], .
     }
     return await visit(base + '/', opts);
   } finally {
+    /* Waited for, not just signalled. A run started right after this one
+       takes the same port, and while the old server was still going the
+       new page was answered by it, from a staged folder already deleted:
+       the page came up without its scripts and reported nothing. */
+    const gone = new Promise(r => child.once('exit', r));
     child.kill();
+    await Promise.race([gone, new Promise(r => setTimeout(r, 2000))]);
     if (!process.env.KEEP_STAGE)
       await fsp.rm(dir, { recursive: true, force: true }).catch(() => {});
   }

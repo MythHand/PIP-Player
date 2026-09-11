@@ -85,6 +85,11 @@ const MIME = {
 /* ── helpers ───────────────────────────────────────────────── */
 const inRoots = p => ROOTS.some(r => p === r || p.startsWith(r + path.sep));
 const safePath = raw => { if (!raw) return null; const p = path.resolve(raw); return inRoots(p) ? p : null; };
+/* The routes that open a file take only media files. Inside the home
+   folder there is more than video, and /api/raw handed out any file at
+   all to whoever passed the checks below. They let no other site
+   through, but a player has no business serving keys or documents. */
+const mediaPath = raw => { const p = safePath(raw); return p && MEDIA_EXT.test(p) ? p : null; };
 
 /* ── who is knocking ─────────────────────────────────────────
    Listening on 127.0.0.1 is not enough. While the server runs, any
@@ -99,8 +104,8 @@ const safePath = raw => { if (!raw) return null; const p = path.resolve(raw); re
    cannot forge it. Origin is checked when present.
 
    What is reachable without these checks: /api/ls returns the contents
-   of any directory inside the home folder, /api/raw returns the file
-   itself. */
+   of any directory inside the home folder, /api/raw returns any media
+   file in it. */
 const HOSTS = new Set([
   '127.0.0.1:' + PORT, 'localhost:' + PORT, '[::1]:' + PORT,
 ]);
@@ -704,8 +709,8 @@ const server = http.createServer(async (req, res) => {
 
     if (p === '/api/probe') {
       if (!await checkFfmpeg()) return json(res, 503, { error: 'ffprobe not found in PATH' });
-      const file = safePath(url.searchParams.get('path'));
-      if (!file) return json(res, 403, { error: 'path is outside the allowed directories' });
+      const file = mediaPath(url.searchParams.get('path'));
+      if (!file) return json(res, 403, { error: 'not a media file, or outside the allowed directories' });
       const info = await probe(file);
       return json(res, 200, { ...info, plan: planFor(info, info.defaultAudio) });
     }
@@ -713,8 +718,8 @@ const server = http.createServer(async (req, res) => {
     /* Whether the file is ready to play. The client polls this until
        it gets state:'ready' or 'direct'. */
     if (p === '/api/prepare') {
-      const file = safePath(url.searchParams.get('path'));
-      if (!file) return json(res, 403, { error: 'path is outside the allowed directories' });
+      const file = mediaPath(url.searchParams.get('path'));
+      if (!file) return json(res, 403, { error: 'not a media file, or outside the allowed directories' });
       const st = await fsp.stat(file).catch(() => null);
       if (!st?.isFile()) return json(res, 404, { error: 'file not found' });
       if (!await checkFfmpeg()) return json(res, 200, { state: 'direct' });
@@ -747,7 +752,7 @@ const server = http.createServer(async (req, res) => {
 
     if (p === '/api/thumb') {
       if (!await checkFfmpeg()) return res.writeHead(503).end('no ffmpeg');
-      const file = safePath(url.searchParams.get('path'));
+      const file = mediaPath(url.searchParams.get('path'));
       if (!file) return res.writeHead(403).end('forbidden');
       const st = await fsp.stat(file).catch(() => null);
       if (!st?.isFile()) return res.writeHead(404).end('not found');
@@ -766,7 +771,7 @@ const server = http.createServer(async (req, res) => {
        them. The result is cached. */
     if (p === '/api/subs') {
       if (!await checkFfmpeg()) return res.writeHead(503).end('no ffmpeg');
-      const file = safePath(url.searchParams.get('path'));
+      const file = mediaPath(url.searchParams.get('path'));
       if (!file) return res.writeHead(403).end('forbidden');
       const st = await fsp.stat(file).catch(() => null);
       if (!st?.isFile()) return res.writeHead(404).end('not found');
@@ -809,7 +814,7 @@ const server = http.createServer(async (req, res) => {
 
     /* a file the browser plays on its own, served as it is */
     if (p === '/api/raw') {
-      const file = safePath(url.searchParams.get('path'));
+      const file = mediaPath(url.searchParams.get('path'));
       if (!file) return res.writeHead(403).end('forbidden');
       const st = await fsp.stat(file).catch(() => null);
       if (!st?.isFile()) return res.writeHead(404).end('not found');

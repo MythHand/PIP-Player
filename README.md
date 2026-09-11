@@ -25,8 +25,8 @@ rest are handled by a server on your own machine, nothing goes to the network.
 
 ## Running it
 
-Chrome or Edge 116+: extended Picture-in-Picture is built on the Document
-Picture-in-Picture API, which only these have.
+Tested in Chrome. Extended Picture-in-Picture is built on the Document
+Picture-in-Picture API, which Chrome has since version 116.
 
 Without the server: open `index.html` and drop files or a folder onto the
 window. It plays what the browser can play on its own.
@@ -38,8 +38,9 @@ node server.mjs
 ```
 
 Then open `http://127.0.0.1:8777`. Needs Node 18+ and `ffmpeg` with `ffprobe`
-on `PATH`. macOS, Windows, Linux. `start.command`, `start.bat` and `start.sh`
-start the server and open the page on a double click.
+on `PATH`. macOS, Windows, Linux. `start.command` and `start.bat` start the
+server and open the page on a double click, `start.sh` does the same from a
+terminal.
 
 | | without the server | with the server |
 |---|---|---|
@@ -53,13 +54,15 @@ queue coming back after a reload, the cache.
 
 ## Picture-in-Picture
 
-- Browser mode: a window with no address bar, system controls. Previous and
+- Browser mode: a window with no address bar, browser controls. Previous and
   next work through the Media Session API.
-- Extended mode: the whole player moves into the floating window with the seek
-  bar, volume, speed, audio track and subtitle pickers, repeat and
-  auto-advance. The queue, the settings and fullscreen stay in the main
-  window.
+- Extended mode: the player moves into the floating window with the seek bar,
+  volume, audio track and subtitle pickers. Speed, repeat and auto-advance are
+  set before the window opens. The queue, the settings and fullscreen stay in
+  the main window.
   - Hotkeys work inside the floating window too.
+  - The recommended minimum width of the window is 300 pixels: narrower than
+    that, the buttons run into each other.
 
 > Removing the site address bar from the top of the window in extended mode
 > did not work out: Chrome draws it itself. That is why browser mode is the
@@ -90,7 +93,8 @@ queue coming back after a reload, the cache.
 ## The local ffmpeg server
 
 - One ffmpeg pass per file and track: the video is stream-copied, only the
-  chosen audio track is re-encoded to AAC.
+  chosen audio track is re-encoded to AAC. The sound is downmixed to stereo:
+  5.1 is not kept, there was nothing to test it on.
 - The file is prepared whole in advance, not in pieces on the fly. Encoding in
   pieces joined the sound to the video anew on every seek, and the two drifted
   apart.
@@ -144,10 +148,16 @@ queue coming back after a reload, the cache.
 - Two typefaces.
 - Hotkeys are bound to physical key codes and work in any keyboard layout.
 - The control panel hides itself, the favicon shows the state.
+- When room is short, next to the open queue for one, the control panel
+  tightens: speed, repeat and auto-advance fold into a gear at the bottom
+  right and open on hover, and the studio name on the audio track button gets
+  shorter. With fewer than four letters left, only the icon stays on the
+  button.
 - General player settings under the gear at the top right: the file panel
-  overlays the video or shrinks it, changing the order of files by hand,
-  hiding the controls on auto-advance, typeface, language. Also there: the
-  hotkey list and the server cache.
+  overlays the video or shrinks it (in a window narrower than 820 pixels it
+  always overlays), changing the order of files by hand, hiding the controls
+  on auto-advance, typeface, language. Also there: the hotkey list and the
+  server cache.
 - The cache is one bar: the fill shows the space taken, the knob sets the
   limit, 24 GB by default. The bar ends where the room for the cache on the
   disk ends: the space it takes plus the free space. The limit does not go
@@ -175,7 +185,7 @@ queue coming back after a reload, the cache.
 | `P` | Picture-in-Picture |
 | `F` | fullscreen |
 | `Q` | show / hide the queue |
-| `Esc` | close the menu, the PiP window or the queue |
+| `Esc` | close the menu, the extended PiP window or the queue |
 
 Seek bar focused with `Tab`: `←` `→` by 5 seconds, `PageUp` `PageDown` by a
 minute. Click on the picture: pause. Double click: fullscreen.
@@ -205,6 +215,8 @@ is limited:
 - Reads the home folder, `/Volumes`, `/media`, `/mnt`, `/run/media`, the
   drives on Windows and the folder passed as an argument. Other paths are
   refused.
+- Opens media files only, video and audio. Other files in those folders are
+  not served.
 - Writes only to its cache.
 
 ## Project files
@@ -217,10 +229,13 @@ i18n.js         interface texts in ten languages
 server.mjs      the local ffmpeg server
 check.mjs       check of markup, styles and translations
 test/           tests
-assets/         README images and the logo
+assets/         README images, the logo, the mark and the avatar
 start.command   start, macOS
 start.bat       start, Windows
 start.sh        start, Linux
+README.md       this description
+README.ru.md    the description in Russian
+LICENSE         the MIT licence
 FixelDisplay/   typeface and its licence
 Inter/          typeface and its licence
 ```
@@ -233,10 +248,11 @@ node --test
 ```
 
 `check.mjs` checks the markup, styles and dictionaries without running them.
-`node --test` runs 106 tests: the server over HTTP, the interface in headless
+`node --test` runs the tests: the server over HTTP, the interface in headless
 Chrome. The test media is generated by ffmpeg in a temporary folder, none of
 your files is read. Needs Node 20+, ffmpeg and Chrome; without Chrome the
-interface tests are skipped.
+interface tests are skipped. The path to Chrome can be set with the `CHROME`
+variable.
 
 ![Output of node --test](assets/tests.png)
 
@@ -255,4 +271,5 @@ interface tests are skipped.
 ## License
 
 MIT, see [LICENSE](LICENSE). The typefaces have their own licences, listed
-above.
+above. The MythHand name, logo, mark and avatar are not covered by MIT: all
+rights to them stay with MythHand.

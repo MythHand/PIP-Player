@@ -37,6 +37,14 @@ const SCRIPT = `
        lives inside it with a filled button of its own */
     primary: [...document.querySelectorAll('#empty .btn--solid')].map(b => b.id),
     docTitle: document.title,
+    /* with no files the header names the panel instead of offering
+       controls with nothing to act on, and there is no cross to shut it */
+    header: {
+      title: getComputedStyle($('.queue__title')).display !== 'none' ? text('.queue__title').trim() : '',
+      controls: [...document.querySelectorAll('.queue__tools .toolgrp')].some(g => getComputedStyle(g).display !== 'none'),
+      close: !$('#btnQueueClose').hidden,
+      info: getComputedStyle($('.info')).display !== 'none',
+    },
   };
 
   /* ── settings arrived from the table, not from the markup ── */
@@ -62,6 +70,12 @@ const SCRIPT = `
     return { side: vb, ink: Math.sqrt(b.width * b.height), px: box(el).width };
   };
   window.__step('icons');
+  /* The header is measured as it is with files in the queue: empty, it
+     hides its controls and its cross, and there would be nothing to
+     compare the footer with. */
+  $('#queue').classList.remove('queue--empty');
+  $('#btnQueueClose').hidden = false;
+  $('#btnLocate').hidden = false;
   out.icons = [];
   for (const el of document.querySelectorAll('svg.ph')) {
     if (!box(el).width) continue;
@@ -77,6 +91,9 @@ const SCRIPT = `
       fill: getComputedStyle(el).fill,
     });
   }
+  $('#queue').classList.add('queue--empty');
+  $('#btnQueueClose').hidden = true;
+  $('#btnLocate').hidden = true;
 
   /* ── the gear menu ── */
   window.__step('gear');
@@ -93,6 +110,12 @@ const SCRIPT = `
     rightGap: Math.round(window.innerWidth - box(gear).right),
     topGap: Math.round(box(gear).top - box($('#btnGear')).bottom),
   };
+  /* with nothing in the queue: the stage carried the start screen's class
+     and its z-index 7, and the menu opened under the queue */
+  { const q = box($('#queue')), g = box(gear);
+    const hit = document.elementFromPoint(Math.round((g.left + q.right) / 2), Math.round(g.top + 80));
+    out.gear.overQueue = g.left < q.right;
+    out.gear.onTop = !!(hit && hit.closest('#gearMenu')); }
 
   /* ── switching language repaints everything at once ── */
   window.__step('language');
@@ -152,6 +175,18 @@ before(async () => {
 }, { timeout: 120000 });
 
 const skip = !chrome && 'no Chrome found; set CHROME to its path';
+
+describe('the queue header with no files', { skip }, () => {
+  test('names the panel instead of showing the view and order controls', () => {
+    assert.equal(R.boot.header.title, 'About');
+    assert.equal(R.boot.header.controls, false);
+  });
+
+  test('has no cross, there would be no way back', () => {
+    assert.equal(R.boot.header.close, false);
+    assert.equal(R.boot.header.info, false, 'the info button is for a shut panel');
+  });
+});
 
 describe('opening the page', { skip }, () => {
   test('nothing throws on the way up', () => {
@@ -227,6 +262,11 @@ describe('icons', { skip }, () => {
 });
 
 describe('the gear menu', { skip }, () => {
+  test('with an empty queue it still opens over the queue, not under it', () => {
+    assert.ok(R.gear.overQueue, 'at 1280 it reaches over the queue');
+    assert.ok(R.gear.onTop, 'the queue covers the menu');
+  });
+
   test('opens with all three columns', () => {
     assert.equal(R.gear.open, true);
     assert.equal(R.gear.columns, 3);
@@ -277,5 +317,50 @@ describe('the keyboard', { skip }, () => {
     assert.deepEqual(R.keys.fired, ['KeyQ']);
     assert.notEqual(R.keys.after, R.keys.before,
       'the physical Q must toggle the queue even though the key produced "a"');
+  });
+});
+
+/* A narrow window. The queue takes the whole width there, and docked
+   beside the video, the default, it squeezed the frame to nothing: the
+   stage came out 0px wide. In a narrow window it always lies over the
+   video instead. */
+const NARROW = `
+  await window.__settled();
+  const $ = s => document.querySelector(s);
+  const out = { errors: window.__errors.slice() };
+  out.start = {
+    queueOpen: $('#workspace').classList.contains('queue-open'),
+    info: getComputedStyle($('.info')).display !== 'none',
+  };
+  $('#btnInfo').click();
+  await window.__settled();
+  out.opened = {
+    queueOpen: $('#workspace').classList.contains('queue-open'),
+    docked: $('#workspace').classList.contains('queue-docked'),
+    close: !$('#btnQueueClose').hidden,
+    stage: Math.round($('#stageHost').getBoundingClientRect().width),
+    startScreen: Math.round($('.empty__box').getBoundingClientRect().width),
+    window: innerWidth,
+  };
+  window.__report(out);
+`;
+let N;
+describe('a narrow window', { skip }, () => {
+  before(async () => {
+    N = await openFile('narrow', NARROW, { width: 800, height: 600 });
+  }, { timeout: 60000 });
+
+  test('it starts with the panel shut and the info button in its place', () => {
+    assert.deepEqual(N.errors, []);
+    assert.equal(N.start.queueOpen, false, 'the panel would cover the start screen whole');
+    assert.equal(N.start.info, true);
+  });
+
+  test('opened, the queue lies over the video instead of squeezing it to nothing', () => {
+    assert.equal(N.opened.queueOpen, true);
+    assert.equal(N.opened.docked, false, 'docked is the setting, but not in a narrow window');
+    assert.equal(N.opened.stage, N.opened.window, 'the frame keeps the whole width under the queue');
+    assert.ok(N.opened.startScreen > 300, `the start screen under it shrank to ${N.opened.startScreen}px`);
+    assert.equal(N.opened.close, true, 'covering everything, the panel keeps its cross as the way back');
   });
 });

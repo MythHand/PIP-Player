@@ -97,6 +97,7 @@ function setLang(code) {
   langNames = new Intl.DisplayNames([lang], { type: 'language' });
   try { localStorage.setItem('pip.lang', code); } catch (_) {}
   document.documentElement.lang = code;
+  if (state.pipWin) state.pipWin.document.documentElement.lang = code;
   repaintUi();
 }
 
@@ -113,6 +114,7 @@ function repaintUi() {
   syncAudioButton(); syncSubsButton(); syncStatus();
   render();
   closeMenus();
+  fitFoot();         // the captions have changed length
 }
 
 /* ── dom ─────────────────────────────────────────────────── */
@@ -140,12 +142,115 @@ const btnSubs = $('#btnSubs'), subsMenu = $('#subsMenu');
 const btnGear = $('#btnGear'), gearMenu = $('#gearMenu');
 const queueList = $('#queueList'), queueFiles = $('#queueFiles'), queueTotal = $('#queueTotal');
 const btnViewRows = $('#btnViewRows'), btnViewGrid = $('#btnViewGrid');
-const ghostName = $('#ghostName');
+const ghostName = $('#ghostName'), pipGhost = $('#pipGhost');
 const filePick = $('#filePick'), dirPick = $('#dirPick'), favicon = $('#favicon');
 const dropveil = $('#dropveil'), toastEl = $('#toast');
 const browserModal = $('#browserModal'), helpModal = $('#helpModal');
 const brPlaces = $('#brPlaces'), brList = $('#brList'), brPath = $('#brPath');
 const btnDisk = $('#btnDisk'), btnEmptyDisk = $('#btnEmptyDisk');
+const deckPack = $('#deckPack'), btnPack = $('#btnPack'), queueAdd = $('.queue__add');
+const queueEl = $('#queue'), btnLocate = $('#btnLocate');
+const MENUS = [audioMenu, pipMenu, rateMenu, subsMenu, gearMenu];
+
+/* ── fitting into narrow places ───────────────────────────────
+   The layout was drawn for a wide window. Next to an open queue the
+   stage is much narrower than the browser window, and so is the PiP
+   window, and three things broke there: the deck, the menus and the
+   queue footer. Each is fitted here after the fact. The rules for what
+   gives way are in styles.css, next to the classes set below. */
+
+/* The deck: speed, loop and autoplay fold into a gear, then the studio
+   name loses letters, then goes. Each side gets half of what the centre
+   leaves, and a side that needs more takes the next step. */
+const deckRow = deck.querySelector('.deck__ctrls'), deckCenter = deck.querySelector('.deck__center');
+const deckLeft = deck.querySelector('.deck__side--left'), deckRight = deck.querySelector('.deck__side--right');
+const textMeter = document.createElement('canvas').getContext('2d');
+/* how wide the studio name is with four letters and an ellipsis:
+   anything shorter names nothing, and the icon alone is better */
+function fourLetters() {
+  const cs = getComputedStyle(audioLabel), chars = [...audioLabel.textContent];
+  textMeter.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+  textMeter.letterSpacing = cs.letterSpacing;   // the interface tracking, or four letters came out three
+  return Math.ceil(textMeter.measureText(chars.length > 4 ? chars.slice(0, 4).join('') + '…' : chars.join('')).width) + 1;
+}
+function fitDeck() {
+  if (!deckRow.clientWidth) return;               // hidden, nothing to measure
+  deck.classList.remove('deck--packed', 'deck--compact', 'deck--offcentre');
+  const gap = parseFloat(getComputedStyle(deckRow).columnGap) || 0;
+  /* measured afresh each time: the compact step changes the padding
+     and the size of the centre */
+  const room = () => (deckRow.clientWidth - deckCenter.offsetWidth) / 2 - gap;
+  if (deckRight.scrollWidth > room()) deck.classList.add('deck--packed');
+  if (stage.classList.contains('pip-mode')) { fitLabel(Infinity); return; }   // the PiP window has rules of its own
+  if (!fitLabel(room()) || deckRight.scrollWidth > room()) {
+    deck.classList.add('deck--compact');
+    /* the last step: the centre leaves the exact middle, and the sides
+       share the row by what they hold rather than half and half */
+    if (!fitLabel(room()) || deckRight.scrollWidth > room()) deck.classList.add('deck--offcentre');
+  }
+}
+/* Shortens the studio name to the room its side has. False when even
+   the icon alone leaves the side too wide. */
+function fitLabel(room) {
+  btnAudio.classList.remove('rb--icon');
+  audioLabel.style.maxWidth = '';
+  const over = deckLeft.scrollWidth - room;
+  if (over <= 0) return true;
+  if (btnAudio.hidden) return false;
+  const left = audioLabel.getBoundingClientRect().width - over;
+  if (left >= fourLetters()) { audioLabel.style.maxWidth = Math.floor(left) + 'px'; return true; }
+  btnAudio.classList.add('rb--icon');
+  return deckLeft.scrollWidth <= room;
+}
+new ResizeObserver(fitDeck).observe(deckRow);
+
+/* Touch and keyboard have no hover, so the gear opens the tray on a
+   click as well. A click anywhere else closes it. */
+btnPack.onclick = e => {
+  e.stopPropagation();
+  const open = !deckPack.classList.contains('open');
+  deckPack.classList.toggle('open', open);
+  btnPack.setAttribute('aria-expanded', String(open));
+};
+function closePack() {
+  deckPack.classList.remove('open');
+  btnPack.setAttribute('aria-expanded', 'false');
+}
+
+/* A menu opens from its button, and a wide one can run past the edge of
+   the window: at 1024 the subtitle menu hung 261px beyond the right one.
+   An open menu is moved back inside the window it is in, the main one or
+   the PiP one. The queue is no border for it: a menu lies over everything.
+   Watched rather than called: menus are opened and rebuilt in half a
+   dozen places. */
+function fitMenu(m) {
+  m.style.translate = '';
+  if (!m.classList.contains('open')) return;
+  const right = m.ownerDocument.documentElement.clientWidth, pad = 12;
+  const r = m.getBoundingClientRect();
+  const dx = r.right > right - pad ? right - pad - r.right
+           : r.left < pad ? pad - r.left : 0;
+  if (dx) m.style.translate = Math.round(dx) + 'px 0';
+}
+const fitMenus = () => MENUS.forEach(fitMenu);
+const menuWatch = new MutationObserver(recs => {
+  for (const m of new Set(recs.map(r => r.target))) fitMenu(m);
+});
+for (const m of MENUS) menuWatch.observe(m, { attributes: true, attributeFilter: ['class'], childList: true });
+
+/* The queue footer: once the buttons stop fitting on one line they stand
+   two by two. The panel is watched rather than the footer, whose height
+   is what this changes. */
+function fitFoot() {
+  queueAdd.classList.remove('queue__add--grid');
+  const tags = [...queueAdd.children].filter(b => !b.hidden);
+  if (tags.length > 1 && tags[tags.length - 1].offsetTop > tags[0].offsetTop)
+    queueAdd.classList.add('queue__add--grid');
+}
+new ResizeObserver(fitFoot).observe($('#queue'));
+
+addEventListener('resize', fitMenus);
+document.fonts.ready.then(() => { fitDeck(); fitFoot(); });
 
 /* ── player settings ──────────────────────────────────────────
    The list below is the single source of truth: the starting values,
@@ -217,6 +322,15 @@ function readStore(key, def) {
 function writeStore(key, val) {
   try { localStorage.setItem(key, JSON.stringify(val)); } catch (_) { /* private mode */ }
 }
+/* Plain strings, through the same guard. Reading storage throws when the
+   browser blocks site data, and a few bare reads in the state below were
+   enough to stop the player before it drew anything. */
+function strFromStore(key, def) {
+  try { return localStorage.getItem(key) ?? def; } catch (_) { return def; }
+}
+function saveStr(key, val) {
+  try { localStorage.setItem(key, val); } catch (_) { /* private mode */ }
+}
 
 const SESSION_V = 1;
 const POS_KEEP = 200;      // how many files we remember positions for
@@ -233,6 +347,29 @@ function markPos(path, sec) {
   const keys = Object.keys(posMap);
   if (keys.length > POS_KEEP) for (const k of keys.slice(0, keys.length - POS_KEEP)) delete posMap[k];
   writeStore('pip.pos', posMap);
+  for (const li of queueList.children) {
+    const it = byId(li.dataset.id);
+    if (it && it.path === path) paintPos(li, it);
+  }
+}
+
+/* Where watching stopped, drawn as a bar on the file's frame, in the
+   rows and in the tiles alike. Only what the player would return to is
+   drawn: the first half minute and the last minute are not kept, so a
+   finished episode has no bar. */
+function paintPos(li, it) {
+  const at = it.path ? posMap[it.path] : null, d = it.dur;
+  const f = at && d ? Math.min(1, at / d) : 0;
+  li.classList.toggle('has-pos', f > 0);
+  li.style.setProperty('--pos', f.toFixed(4));
+}
+
+/* A row's frame takes the proportions of the file: known from the probe,
+   or from the frame itself once it has loaded. Until then the box is
+   16:9, the common case. */
+function paintShape(li, it) {
+  const box = li.querySelector('.item__thumb');
+  if (box && it.aspect) box.style.aspectRatio = String(it.aspect);
 }
 
 let saveT = null;
@@ -282,14 +419,14 @@ function restoreSession() {
 const state = {
   list: [], current: null,
   loop: 'off', queueOpen: true,
-  autoplay: localStorage.getItem('pip.autoplay') !== '0',
+  autoplay: strFromStore('pip.autoplay', '1') !== '0',
   audioPref: null,   // the track chosen by hand, carried to the next files
   subPref: null,     // the same for subtitles; null means off
   set: loadSettings(),   // the player settings, see SETTINGS
   cue: {             // subtitle styling, all within what ::cue can do
-    size: localStorage.getItem('pip.cue.size') || 'm',
-    bg:   localStorage.getItem('pip.cue.bg')   || 'shadow',
-    pos:  localStorage.getItem('pip.cue.pos')  || 'auto',
+    size: strFromStore('pip.cue.size', 'm'),
+    bg:   strFromStore('pip.cue.bg', 'shadow'),
+    pos:  strFromStore('pip.cue.pos', 'auto'),
   },
   pipWin: null, errStreak: 0, seq: 0,
   vol: numFromStore('pip.vol', 1, 0, 1),   // volume survives a reload
@@ -297,9 +434,9 @@ const state = {
   busy: false,             // a file is being prepared, the favicon shows it
   seekPreview: null,       // the position shown while seeking
   browserDir: null,
-  view: localStorage.getItem('pip.view') === 'grid' ? 'grid' : 'rows',
+  view: strFromStore('pip.view', 'rows') === 'grid' ? 'grid' : 'rows',
   /* the browser one by default: it has no address bar on top */
-  pipMode: localStorage.getItem('pip.pipMode') || 'native',
+  pipMode: strFromStore('pip.pipMode', 'native'),
 };
 
 /* A link to the source in the empty queue. An empty string hides it,
@@ -541,6 +678,9 @@ async function sourceFor(it) {
   }
   const r = await ensureReady(it);
   if (!r) return null;
+  /* the probe answers for the default track; another track can turn a
+     file that played as it is into one that goes through ffmpeg */
+  if (it.direct !== (r.state === 'direct')) { it.direct = r.state === 'direct'; paintMeta(); }
   return r.state === 'direct'
     ? '/api/raw?path=' + encodeURIComponent(it.path)
     : '/api/media?key=' + r.key;
@@ -608,7 +748,11 @@ function probeLocal() {
   if (!it) return;
   probingLocal = true;
   const fin = () => { probingLocal = false; paintMeta(); probeLocal(); };
-  prober.addEventListener('loadedmetadata', () => { it.dur = isFinite(prober.duration) ? prober.duration : 0; fin(); }, { once: true });
+  prober.addEventListener('loadedmetadata', () => {
+    it.dur = isFinite(prober.duration) ? prober.duration : 0;
+    if (prober.videoWidth && prober.videoHeight) it.aspect = prober.videoWidth / prober.videoHeight;
+    fin();
+  }, { once: true });
   prober.addEventListener('error', () => { it.dur = 0; fin(); }, { once: true });
   prober.src = it.url;
 }
@@ -651,6 +795,8 @@ async function probeItem(it) {
       it.tracks = info.audio;
       it.defaultAudio = info.defaultAudio;
       it.videoCodec = info.video ? info.video.codec : null;
+      if (info.video && info.video.width && info.video.height) it.aspect = info.video.width / info.video.height;
+      it.direct = !!(info.plan && info.plan.direct);   // served as it is, ffmpeg not involved
       it.subs = info.subs || [];
     }
   } catch (_) { /* the server may be gone, which is fine */ }
@@ -718,6 +864,9 @@ async function resolveOnDisk(items, { loud } = {}) {
 
   if (loud) toast(t('toast.seeking'));
   let found = 0;
+  /* whether the current file already plays from the browser's copy; asked
+     before the upgrade below, which forgets what was loaded */
+  const c0 = cur(), started = !!(c0 && pending.includes(c0) && c0.loadedSrc);
 
   try {
     const probe = pending[0];
@@ -747,7 +896,12 @@ async function resolveOnDisk(items, { loud } = {}) {
   if (found) {
     render();
     const c = cur();
-    if (c && c.kind === 'server') switchTrack(c);   // the same moment, now through the server
+    /* A file that already plays goes on from the same moment, now through
+       the server. One that is still starting is started over: the search
+       answers within the 0.22 s of the fade, the start it overtook gave up
+       without bringing the picture back, and the video stayed dark and
+       paused. */
+    if (c && pending.includes(c) && c.kind === 'server') { if (c === c0 && started) switchTrack(c); else playItem(c); }
     probeServer();
     hideNotice();
     toast(found === 1 ? t('toast.handedOne') : t('toast.handedN', { n: found }));
@@ -756,9 +910,22 @@ async function resolveOnDisk(items, { loud } = {}) {
 }
 
 function upgradeItem(it, hit) {
-  if (it.url) { URL.revokeObjectURL(it.url); it.url = null; }
+  /* The browser's copy of the file playing now is still being read by the
+     video; it is let go once the server's version is in (loadSource). */
+  if (it.url) {
+    if (it === cur() && it.loadedSrc === it.url) it.staleUrl = it.url;
+    else URL.revokeObjectURL(it.url);
+    it.url = null;
+  }
+  const localKey = it.path;          // a dropped file is kept by its name
   it.kind = 'server';
   it.path = hit.path;
+  /* the place kept while the browser played it moves to the path on disk */
+  if (localKey && posMap[localKey] != null) {
+    if (posMap[it.path] == null) posMap[it.path] = posMap[localKey];
+    delete posMap[localKey];
+    writeStore('pip.pos', posMap);
+  }
   it.size = hit.size || it.size;
   it.probed = false;
   it.audioIndex = null;
@@ -800,7 +967,7 @@ async function playItem(it, autoplay = true) {
   hideNotice();
   endCard.classList.remove('show');
   emptyEl.classList.add('hide');
-  stage.classList.remove('empty');
+  stage.classList.remove('is-empty');
 
   paintTitle();
   ghostName.textContent = it.name;
@@ -817,39 +984,50 @@ async function playItem(it, autoplay = true) {
   await faded;                       // let the fade finish
   if (token !== playToken || it !== cur()) return;
 
-  it.loadedSrc = src;
-  video.src = src;
-  video.load();
-  video.addEventListener('loadeddata', reveal, { once: true });
-  setTimeout(reveal, 4000);          // a fallback in case the frame never arrives
   /* returning to the last position: only if the file was left in the
      middle, and only once per start, after that it is ordinary
      watching */
   const back = posMap[it.path];
-  if (back != null) {
-    video.addEventListener('loadedmetadata', () => {
-      const d = duration();
-      if (back < POS_MIN || (d && back > d - POS_TAIL)) return;
-      video.currentTime = back;
-      toast(t('toast.resume', { time: fmt(back) }));
-    }, { once: true });
-  }
-  if (autoplay) video.play().catch(() => toast(t('toast.needGesture')));
+  loadSource(it, src, token, () => {
+    const d = duration();
+    if (back == null || back < POS_MIN || (d && back > d - POS_TAIL)) return;
+    video.currentTime = back;
+    toast(t('toast.resume', { time: fmt(back) }));
+  }, autoplay);
   syncAudioButton(); syncSubsButton(); applySubs(it);
   armAudioCheck(); prefetchNext();
 }
 
-/* changing the track: a different prepared file, the same position */
-async function switchTrack(it) {
-  const at = video.currentTime, playing = !video.paused;
-  const token = ++playToken;
-  const src = await sourceFor(it);
-  if (token !== playToken || it !== cur() || !src) return;
+/* Puts a source into the video: the one place where a start ends, for a
+   new file and for a new track alike. Both used to do it on their own,
+   and they differed where it hurt. The track change never brought the
+   picture back, so overtaking a file mid-fade left it dark. And the jump
+   to a saved position was a bare listener: set for one file and left
+   waiting when the next file came in before its metadata, it moved that
+   next file to the first one's position. Now the jump answers to the
+   start it belongs to, and the picture is shown for whichever start
+   comes last. A refused play() is not reported: it also fails on every
+   interrupted start, and the play button shows the state anyway. */
+function loadSource(it, src, token, onMeta, play) {
   it.loadedSrc = src;
   video.src = src;
   video.load();
-  video.addEventListener('loadedmetadata', () => { video.currentTime = at; }, { once: true });
-  if (playing) video.play().catch(() => {});
+  if (it.staleUrl) { URL.revokeObjectURL(it.staleUrl); it.staleUrl = null; }
+  const reveal = fadeIn();
+  video.addEventListener('loadeddata', reveal, { once: true });
+  setTimeout(reveal, 4000);          // a fallback in case the frame never arrives
+  video.addEventListener('loadedmetadata', () => { if (token === playToken) onMeta(); }, { once: true });
+  if (play) video.play().catch(() => {});
+}
+
+/* changing the track: a different prepared file, the same position */
+async function switchTrack(it) {
+  /* a file still starting counts as playing: the start meant to play it */
+  const at = video.currentTime, playing = !video.paused || !it.loadedSrc;
+  const token = ++playToken;
+  const src = await sourceFor(it);
+  if (token !== playToken || it !== cur() || !src) return;
+  loadSource(it, src, token, () => { video.currentTime = at; }, playing);
   syncAudioButton(); syncSubsButton(); applySubs(it);
   prefetchNext();          // the next file is prepared with the new choice
 }
@@ -943,7 +1121,11 @@ stage.addEventListener('pointermove', poke);
 deck.addEventListener('pointerenter', () => { overDeck = true; });
 deck.addEventListener('pointerleave', () => { overDeck = false; poke(); });
 
-const queueOverlays = () => state.set.queueMode === 'overlay';
+/* In a narrow window the queue takes the whole width, and docked beside
+   the video it squeezed the frame to nothing. There it always lies over
+   the video, whatever the setting says, and behaves as it does in that
+   mode: a click on the picture closes it. */
+const queueOverlays = () => !queueDocked();
 let clickT = null, justClosedQueue = 0;
 video.addEventListener('click', e => {
   e.preventDefault();
@@ -993,11 +1175,13 @@ function bindSlider(el, { onInput, onCommit, onHover }) {
   el.addEventListener('pointercancel', up);
 }
 
-bindSlider(seek, {
+/* named, the PiP window's copy of the deck binds its sliders to the same */
+const seekSlider = {
   onInput: r => { state.seekPreview = r * duration(); paintSeek(); },
   onCommit: r => seekTo(r * duration()),
   onHover: r => { seekTip.textContent = fmt(r * duration()); seekTip.style.left = r * 100 + '%'; },
-});
+};
+bindSlider(seek, seekSlider);
 seek.addEventListener('keydown', e => {
   const step = { ArrowLeft: -5, ArrowRight: 5, PageDown: -60, PageUp: 60 }[e.key];
   if (step != null) { e.preventDefault(); e.stopPropagation(); nudge(e.shiftKey ? step / 5 : step); }
@@ -1005,9 +1189,10 @@ seek.addEventListener('keydown', e => {
   if (e.key === 'End') { e.preventDefault(); e.stopPropagation(); seekTo(duration() - 2); }
 });
 
-bindSlider(volBar, {
+const volSlider = {
   onInput: r => { video.volume = r; video.muted = r === 0; },
-});
+};
+bindSlider(volBar, volSlider);
 volBar.addEventListener('keydown', e => {
   if (e.key === 'ArrowLeft') { e.preventDefault(); e.stopPropagation(); video.volume = Math.max(0, video.volume - .05); }
   if (e.key === 'ArrowRight') { e.preventDefault(); e.stopPropagation(); video.volume = Math.min(1, video.volume + .05); }
@@ -1082,6 +1267,7 @@ function syncAudioButton() {
   audioLabel.textContent = sel ? (sel.short || sel.main) : t('audio.short');
   btnAudio.title = sel ? t('audio.current', { name: sel.main }) : t('audio.title');
   if (opts.length < 2) audioMenu.classList.remove('open');
+  fitDeck();         // the name has changed, and so has the room it takes
 }
 
 function buildAudioMenu() {
@@ -1162,6 +1348,7 @@ function syncSubsButton() {
   const sel = opts.find(o => o.sel);
   btnSubs.title = sel ? t('subs.current', { name: sel.main }) : t('subs.offToast');
   if (!opts.length) subsMenu.classList.remove('open');
+  fitDeck();
 }
 
 /* A menu in two columns: tracks on the left, styling on the right. The
@@ -1310,7 +1497,7 @@ function applyCueLine() {
 
 function setCue(key, val) {
   state.cue[key] = val;
-  localStorage.setItem('pip.cue.' + key, val);
+  saveStr('pip.cue.' + key, val);
   applyCueStyle();
   buildSubsMenu();
 }
@@ -1347,8 +1534,11 @@ function menuTitle(menu, text) {
    The one place where a setting turns into behaviour. It has to be
    called at startup as well, otherwise a saved value lives only in the
    menu. */
+const narrowWindow = matchMedia('(max-width:820px)');
+function queueDocked() { return state.set.queueMode === 'docked' && !narrowWindow.matches; }
+narrowWindow.addEventListener('change', () => applySettings());
 function applySettings() {
-  workspace.classList.toggle('queue-docked', state.set.queueMode === 'docked');
+  workspace.classList.toggle('queue-docked', queueDocked());
   queueList.classList.toggle('no-drag', state.set.drag === 'off');
   for (const li of queueList.children) li.draggable = state.set.drag === 'on';
   /* the font lives in a variable on :root, and the same one has to be
@@ -1580,10 +1770,10 @@ btnSubs.onclick = e => {
 };
 
 function closeMenus(except) {
-  for (const m of [audioMenu, pipMenu, rateMenu, subsMenu, gearMenu]) if (m && m !== except) m.classList.remove('open');
+  for (const m of MENUS) if (m && m !== except) m.classList.remove('open');
 }
 function anyMenuOpen() {
-  return [audioMenu, pipMenu, rateMenu, subsMenu, gearMenu].some(m => m && m.classList.contains('open'));
+  return MENUS.some(m => m && m.classList.contains('open'));
 }
 btnAudio.onclick = e => {
   e.stopPropagation();
@@ -1591,7 +1781,10 @@ btnAudio.onclick = e => {
   closeMenus(audioMenu);
   audioMenu.classList.toggle('open');
 };
-document.addEventListener('click', e => { if (!e.target.closest('.menuwrap')) closeMenus(); });
+document.addEventListener('click', e => {
+  if (!e.target.closest('.menuwrap')) closeMenus();
+  if (!e.target.closest('#deckPack')) closePack();
+});
 
 /* ── diagnosing "there is no sound" ────────────────────────── */
 let audioCheckT;
@@ -1605,7 +1798,7 @@ function armAudioCheck() {
     if (it.kind === 'server') return;   // the server has already re-encoded the audio
     showNotice(t(
       state.server && state.server.ffmpeg && it.kind === 'local' ? 'notice.direct'
-      : state.server ? 'notice.pickOther'
+      : state.server ? 'hint.noFfmpeg'   // without ffprobe there is no track list to pick from
       : 'notice.codec'));
   }, 3500);
 }
@@ -1629,16 +1822,19 @@ function render() {
   queueFiles.textContent = t('queue.count', { n: state.list.length });
   const grid = state.view === 'grid';
   queueList.classList.toggle('queue__list--grid', grid && state.list.length > 0);
+  queueEl.classList.toggle('queue--empty', !state.list.length);
+  btnLocate.hidden = !cur() || !state.list.length;
+  syncQueueClose();
 
   if (!state.list.length) {
     queueList.replaceChildren(aboutBlock());
     queueTotal.textContent = '0:00:00';
-    stage.classList.add('empty');
+    stage.classList.add('is-empty');
     if (booted) emptyEl.classList.remove('hide');
     syncStatus();
     return;
   }
-  stage.classList.remove('empty');
+  stage.classList.remove('is-empty');
 
   const frag = document.createDocumentFragment();
   for (const it of state.list) frag.append(grid ? tileFor(it) : rowFor(it));
@@ -1646,8 +1842,18 @@ function render() {
   paintMeta();
   const active = queueList.querySelector('.item.active, .tile.active');
   if (active) active.scrollIntoView({ block: 'nearest' });
-  if (grid) watchTiles();
+  watchThumbs();
 }
+
+/* In a long season the file playing is easy to lose while scrolling.
+   This brings it back into view, not to the very top but at 23 % of the
+   list's height, so the files before it are still seen. */
+btnLocate.onclick = () => {
+  const li = queueList.querySelector('.item.active, .tile.active');
+  if (!li) return;
+  const box = queueList.getBoundingClientRect(), r = li.getBoundingClientRect();
+  queueList.scrollTo({ top: queueList.scrollTop + r.top - box.top - box.height * 0.23, behavior: 'smooth' });
+};
 
 /* ── the project description in an empty queue ────────────────
    The order here carries meaning and is not accidental. At the top,
@@ -1663,7 +1869,7 @@ const FEAT_GROUPS = [
   ['audio', 5],     // without a track choice a release cannot be watched
   ['bridge', 7],    // what makes any of it play at all
   ['play', 7],      // the mechanics of watching a series
-  ['ui', 4],        // the trimmings
+  ['ui', 5],        // the trimmings
 ];
 
 function aboutBlock() {
@@ -1751,10 +1957,13 @@ function rowFor(it) {
   li.classList.add('item');
   li.innerHTML =
     `<span class="item__grip">${phSvg(PH.grip)}</span>` +
-    `<span class="item__eq"><i></i><i></i><i></i></span>` +
+    `<span class="item__thumb"><span class="item__eq"><i></i><i></i><i></i></span><span class="pos"><i></i></span></span>` +
     `<span class="item__body"><span class="item__name"></span><span class="item__meta"></span></span>` +
     `<span class="item__x" title="${t('queue.remove')}">${phSvg(PH.x)}</span>`;
   li.querySelector('.item__name').textContent = it.name;
+  if (it.thumb) putThumb(li, it.thumb);
+  paintPos(li, it);
+  paintShape(li, it);
   return li;
 }
 
@@ -1765,33 +1974,38 @@ function tileFor(it) {
   const li = markup(it, document.createElement('li'));
   li.classList.add('tile');
   li.title = it.name;
-  li.innerHTML = '<span class="tile__name"></span><span class="tile__eq"><i></i><i></i><i></i></span>';
+  li.innerHTML = '<span class="tile__name"></span><span class="tile__eq"><i></i><i></i><i></i></span><span class="pos"><i></i></span>';
   li.querySelector('.tile__name').textContent = it.name;
   if (it.thumb) putThumb(li, it.thumb);
+  paintPos(li, it);
+  paintShape(li, it);
   return li;
 }
 
 function putThumb(li, src) {
   /* The image is loaded aside first and only then set as background:
      otherwise the tile flashes as an empty rectangle over the file
-     name. */
+     name. A tile is the frame itself; a row keeps it in a box of its own. */
+  const box = li.querySelector('.item__thumb') || li;
   const img = new Image();
   img.decoding = 'async';
   img.addEventListener('load', () => {
     if (!li.isConnected) return;
-    li.style.backgroundImage = `url("${src.replace(/"/g, '%22')}")`;
-    li.classList.add('has-thumb');
+    box.style.backgroundImage = `url("${src.replace(/"/g, '%22')}")`;
+    box.classList.add('has-thumb');
+    const it = byId(li.dataset.id);
+    if (it && !it.aspect && img.naturalHeight) { it.aspect = img.naturalWidth / img.naturalHeight; paintShape(li, it); }
   }, { once: true });
   img.src = src;
 }
 
 /* ── thumbnails ───────────────────────────────────────────────
-   Frames are taken only for tiles that are actually visible: a season
-   can hold close to a hundred files, and there is no point running
-   ffmpeg on all of them at once. */
+   Frames are taken only for rows and tiles that are actually visible: a
+   season can hold close to a hundred files, and there is no point
+   running ffmpeg on all of them at once. */
 let tileWatcher = null;
 
-function watchTiles() {
+function watchThumbs() {
   if (tileWatcher) tileWatcher.disconnect();
   tileWatcher = null;
 
@@ -1886,6 +2100,7 @@ function paintMeta() {
   queueTotal.textContent = fmtLong(state.list.reduce((a, b) => a + (b.dur || 0), 0));
   for (const li of queueList.children) {
     const it = state.list.find(x => String(x.id) === li.dataset.id);
+    if (it) { paintPos(li, it); paintShape(li, it); }   // both need what the probe brings
     const box = it && li.querySelector('.item__meta');
     if (!box) continue;
     /* the first two columns have a fixed width so the rows line up */
@@ -1901,7 +2116,7 @@ function paintMeta() {
         : (it.tracks[0] ? it.tracks[0].codec.toUpperCase() : ''));
     }
     if (state.server && state.server.ffmpeg) {
-      rest.push(it.kind === 'server'
+      rest.push(it.kind === 'server' && !it.direct
         ? `<b class="route">${t('queue.viaBridge')}</b>`
         : `<span class="route route--off">${t('queue.direct')}</span>`);
     }
@@ -2064,10 +2279,41 @@ function toggleQueue(force) {
   state.queueOpen = force === undefined ? !state.queueOpen : force;
   workspace.classList.toggle('queue-open', state.queueOpen);
   btnList.classList.toggle('on', state.queueOpen);
+  fitDeck();         // the stage has changed width; the observer follows the slide
 }
 btnList.onclick = () => toggleQueue();
 $('#btnQueueClose').onclick = () => toggleQueue(false);
-toggleQueue(true);
+$('#btnInfo').onclick = () => toggleQueue(true);
+/* In a narrow window the panel would cover the start screen whole, so
+   there the player starts with it shut; the info button opens it. */
+toggleQueue(!narrowWindow.matches);
+
+/* With nothing loaded the panel holds the project description, and
+   closing it had no way back: the queue button lives in the deck, which
+   is hidden then. So the cross goes, except in a narrow window: there
+   the panel covers everything, the info button included, and the cross
+   is the only way back to the start screen. */
+function syncQueueClose() {
+  $('#btnQueueClose').hidden = !state.list.length && !narrowWindow.matches;
+}
+narrowWindow.addEventListener('change', syncQueueClose);
+
+/* While the picture plays in a PiP window, the main tab is where the
+   queue is at hand: the file in the window is switched from here without
+   closing it. So the queue opens when PiP starts, at any width: in a
+   narrow window it covers the placeholder, which has nothing to show
+   anyway. It closes again when PiP ends, provided it was this that
+   opened it and it is still open. */
+let pipOpenedQueue = false;
+function pipStarted() {
+  if (state.queueOpen) return;
+  toggleQueue(true);
+  pipOpenedQueue = true;
+}
+function pipEnded() {
+  if (pipOpenedQueue && state.queueOpen) toggleQueue(false);
+  pipOpenedQueue = false;
+}
 
 /* ═══════════════ fullscreen ═══════════════ */
 const isFull = () => !!document.fullscreenElement;
@@ -2130,11 +2376,11 @@ function buildPipMenu() {
     b.innerHTML = `<span class="menu__tick">${phSvg(PH.check)}</span>
       <span class="menu__body"><span class="menu__main"></span><span class="menu__sub"></span></span>`;
     b.querySelector('.menu__main').textContent = t(m.main);
-    b.querySelector('.menu__sub').textContent = t(disabled ? 'pip.needChrome' : m.sub);
+    b.querySelector('.menu__sub').textContent = t(disabled ? 'pip.noDoc' : m.sub);
     b.onclick = () => {
       if (disabled) return;
       state.pipMode = m.id;
-      localStorage.setItem('pip.pipMode', m.id);
+      saveStr('pip.pipMode', m.id);
       pipMenu.classList.remove('open');
       toast(t('pip.switched', { name: t(m.main) }));
       if (state.pipWin) state.pipWin.close();
@@ -2150,6 +2396,102 @@ btnPipMode.onclick = e => {
   closeMenus(pipMenu);
   pipMenu.classList.toggle('open');
 };
+
+/* ── the extended PiP window ─────────────────────────────────
+   The window gets a copy of the player, and only the video itself moves
+   into it. It used to take the whole stage, and the tab was left with a
+   placeholder and no controls at all: no deck, no queue button, no
+   settings, so a queue closed on a narrow screen could not be opened
+   again. Now the tab keeps everything, as it does in the browser's own
+   PiP, and the window is a second view of the same player.
+
+   The copy is the stage cloned at the moment of opening, with pip-mode
+   on it, so it looks as the moved stage used to. It is kept up to date
+   by mirroring: every change in the tab's stage is replayed in the copy
+   at the same place in the tree. The way back goes by the same address:
+   a button pressed in the window presses its twin in the tab, so every
+   handler stays where it is. Only what belongs to one window is not
+   mirrored: the stage's own classes (idle, the cursor), the deck's
+   fitting to its width, and which menu is open and where it stands. */
+let pipView = null, pipMirror = null, videoSlot = null, pipHideT = 0;
+
+const pathIn = (root, node) => {
+  const p = [];
+  for (let n = node; n !== root; n = n.parentNode) {
+    if (!n || !n.parentNode) return null;
+    p.unshift(Array.prototype.indexOf.call(n.parentNode.childNodes, n));
+  }
+  return p;
+};
+const nodeAt = (root, p) => p.reduce((n, i) => n && n.childNodes[i], root) || null;
+
+/* the classes each window keeps for itself; the rest follow the tab */
+const OWN_CLASSES = new Set(['idle', 'cursor-hidden', 'is-pip', 'pip-mode', 'open',
+  'deck--packed', 'deck--compact', 'deck--offcentre']);
+function mirrorOne(r) {
+  const path = pathIn(stage, r.target);
+  if (!path) return;                                  // already out of the tree
+  if (path.length && path[0] === pathIn(stage, videoSlot)[0]) return;   // the video's place
+  const el = r.target;
+  const twin = path.length ? nodeAt(pipView, path) : pipView;
+  if (!twin) return;
+  if (r.type === 'attributes' && r.attributeName === 'class') {
+    const own = [...twin.classList].filter(c => OWN_CLASSES.has(c));
+    twin.setAttribute('class', el.getAttribute('class') || '');   // an attribute, svg has no string className
+    twin.classList.remove(...OWN_CLASSES);
+    twin.classList.add(...own);
+    return;
+  }
+  /* where an open menu stands is worked out in its own window */
+  if (r.type === 'attributes' && r.attributeName === 'style' && el.classList.contains('menu')) return;
+  if (el === stage && r.type === 'attributes') return;
+  if (r.type === 'attributes') {
+    const v = el.getAttribute(r.attributeName);
+    if (v == null) twin.removeAttribute(r.attributeName); else twin.setAttribute(r.attributeName, v);
+  } else if (r.type === 'characterData') {
+    twin.data = el.data;
+  } else if (el !== stage) {
+    twin.replaceChildren(...Array.from(el.childNodes, n => n.cloneNode(true)));
+  }
+}
+
+/* the deck in the window hides on its own, like the one in the tab */
+function pipPoke() {
+  if (!pipView) return;
+  pipView.classList.remove('idle', 'cursor-hidden');
+  clearTimeout(pipHideT);
+  pipHideT = setTimeout(() => {
+    if (!pipView || video.paused || pipView.querySelector('.menu.open')) return;
+    pipView.classList.add('idle', 'cursor-hidden');
+  }, 2600);
+}
+
+function closePipMenus(except) {
+  if (pipView) for (const m of pipView.querySelectorAll('.menu.open')) if (m !== except) m.classList.remove('open');
+}
+
+/* A press in the window. The track and subtitle buttons open their menu
+   in the window only, built by the tab's own code and mirrored in. A
+   choice in a menu, and every other button, presses its twin in the tab. */
+function pipClick(e) {
+  const t = e.target;
+  if (t.closest('.seek, .vol__bar')) return;          // the sliders handle themselves
+  const opener = t.closest('#btnAudio, #btnSubs');
+  if (opener) {
+    const m = pipView.querySelector(opener.id === 'btnAudio' ? '#audioMenu' : '#subsMenu');
+    const open = !m.classList.contains('open');
+    if (open) (opener.id === 'btnAudio' ? buildAudioMenu : buildSubsMenu)();
+    closePipMenus(m);
+    m.classList.toggle('open', open);
+    if (open) queueMicrotask(() => fitMenu(m));       // after the rebuilt items have been mirrored in
+    return;
+  }
+  const b = t.closest('button');
+  if (!b) { if (!t.closest('.menuwrap')) closePipMenus(); return; }
+  const twin = nodeAt(stage, pathIn(pipView, b));
+  if (twin) twin.click();
+  if (b.classList.contains('menu__item')) closePipMenus();
+}
 
 async function openDocPip() {
   const vw = video.videoWidth || 16, vh = video.videoHeight || 9;
@@ -2170,29 +2512,61 @@ async function openDocPip() {
   });
 
   win.document.title = cur() ? cur().name : 'PIP Player';
+  /* The window has a root element of its own, and the chosen font and
+     the language live on the root. Without them the floating window
+     showed Fixel while the main one was set to Inter. */
+  win.document.documentElement.dataset.font = state.set.font;
+  win.document.documentElement.lang = lang;
   win.document.body.classList.add('pip-body');
-  stage.classList.add('pip-mode');
-  win.document.body.append(stage);
-  stageHost.classList.add('is-pip');
+
+  /* The video's place in the tab is held by an empty slot, and the copy is
+     cloned only after that: a cloned video would start loading its source
+     all over again. In the copy the slot is where the real video goes, so
+     both trees keep the same shape and the mirror finds its way. */
+  videoSlot = document.createElement('span');
+  video.replaceWith(videoSlot);
+  pipView = stage.cloneNode(true);
+  pipView.classList.remove('idle', 'cursor-hidden', 'is-pip');
+  pipView.classList.add('pip-mode');
+  pipView.removeAttribute('tabindex');
+  nodeAt(pipView, pathIn(stage, videoSlot)).replaceWith(video);
+  closePipMenus();
+  win.document.body.append(pipView);
+  pipMirror = new MutationObserver(recs => recs.forEach(mirrorOne));
+  pipMirror.observe(stage, { subtree: true, attributes: true, childList: true, characterData: true });
+
+  bindSlider(pipView.querySelector('#seek'), seekSlider);
+  bindSlider(pipView.querySelector('#volBar'), volSlider);
+  pipView.addEventListener('click', pipClick);
+  pipView.addEventListener('pointermove', pipPoke);
+
+  stage.classList.add('is-pip');
   pipSeg.classList.add('on');
-  applyI18n(win.document);
-  win.document.addEventListener('keydown', onKey);
-  win.document.addEventListener('click', e => { if (!e.target.closest('.menuwrap')) closeMenus(); });
+  win.document.addEventListener('keydown', e => { pipPoke(); onKey(e); });
   win.addEventListener('pagehide', closeDocPip, { once: true });
-  syncStatus(); poke();
+  win.addEventListener('resize', () => { for (const m of pipView.querySelectorAll('.menu.open')) fitMenu(m); });
+  syncStatus(); poke(); pipPoke(); pipStarted();
 }
 function closeDocPip() {
-  stage.classList.remove('pip-mode', 'cursor-hidden');
-  stageHost.insertBefore(stage, stageHost.firstChild);
-  stageHost.classList.remove('is-pip');
+  if (pipMirror) pipMirror.disconnect();
+  clearTimeout(pipHideT);
+  if (videoSlot) videoSlot.replaceWith(video);
+  pipMirror = null; pipView = null; videoSlot = null;
+  stage.classList.remove('is-pip');
   pipSeg.classList.remove('on');
   state.pipWin = null;
-  syncStatus(); poke();
+  syncStatus(); poke(); fitDeck(); pipEnded();
 }
 btnPip.onclick = togglePip;
-$('#btnPipBack').onclick = () => state.pipWin && state.pipWin.close();
-video.addEventListener('enterpictureinpicture', () => { pipSeg.classList.add('on'); syncStatus(); });
-video.addEventListener('leavepictureinpicture', () => { pipSeg.classList.remove('on'); syncStatus(); });
+$('#btnPipBack').onclick = () => {
+  if (state.pipWin) state.pipWin.close();
+  else if (document.pictureInPictureElement) document.exitPictureInPicture().catch(() => {});
+};
+/* the browser's own PiP leaves the video element in the tab, and Chrome
+   paints a placeholder of its own into it; ours stands over it, as in the
+   extended mode */
+video.addEventListener('enterpictureinpicture', () => { stage.classList.add('is-pip'); pipSeg.classList.add('on'); syncStatus(); pipStarted(); });
+video.addEventListener('leavepictureinpicture', () => { stage.classList.remove('is-pip'); pipSeg.classList.remove('on'); syncStatus(); pipEnded(); });
 
 /* ── media session ───────────────────────────────────────── */
 function mediaMeta(it) {
@@ -2244,12 +2618,12 @@ function paintPlay() {
 }
 
 video.addEventListener('play', () => {
-  paintPlay();
+  paintPlay(); pipPoke(); pipGhost.classList.add('playing');
   pulse(true); syncStatus(); markPlaying(true); armAudioCheck();
   deckShow(false);
 });
 video.addEventListener('pause', () => {
-  paintPlay();
+  paintPlay(); pipPoke(); pipGhost.classList.remove('playing');
   pulse(false); syncStatus(); markPlaying(false);
   /* At the end of a file the browser sends pause BEFORE ended, and that
      is not a stop the user asked for. The ended handler decides. */
@@ -2285,6 +2659,7 @@ video.addEventListener('volumechange', () => {
 });
 video.addEventListener('ratechange', () => {
   btnRate.textContent = (video.playbackRate % 1 ? video.playbackRate : video.playbackRate.toFixed(0)) + '×';
+  fitDeck();         // 1.25× is wider than 1×
 });
 video.addEventListener('playing', () => {
   state.errStreak = 0; state.seekPreview = null; autoSwitch = false; syncStatus();
@@ -2321,6 +2696,10 @@ function paintTitle() {
   titleName.textContent = it ? it.name : '—';
   titlePath.textContent = it ? folderOf(it) : '';
 }
+/* A line cut short shows itself whole in the ordinary tooltip. Only a
+   cut one: over a line that fits, the tooltip would repeat it. */
+for (const el of [titleName, titlePath])
+  el.addEventListener('pointerenter', () => { el.title = el.scrollWidth > el.clientWidth ? el.textContent : ''; });
 function markPlaying(on) {
   const li = queueList.querySelector('.item.active, .tile.active');
   if (li) li.classList.toggle('playing', on);
@@ -2404,7 +2783,7 @@ function paintAuto() {
 }
 btnAuto.onclick = () => {
   state.autoplay = !state.autoplay;
-  localStorage.setItem('pip.autoplay', state.autoplay ? '1' : '0');
+  saveStr('pip.autoplay', state.autoplay ? '1' : '0');
   paintAuto();
   toast(t(state.autoplay ? 'auto.toastOn' : 'auto.off'));
 };
@@ -2620,6 +2999,7 @@ async function detectServer() {
   sessionReady = true;
 
   paintModeHint();
+  fitFoot();         // the disk button may have just appeared
   booted = true;
   paintLoop();
   render();          // the screen can be shown now: it is correct already
