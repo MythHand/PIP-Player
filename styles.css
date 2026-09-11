@@ -1,29 +1,29 @@
 /* ═══════════════════════════════════════════════════════════
    PIP Player — monochrome player shell
-   Ориентир: Opera Neon. Стекло, круги, воздух, только серое.
+   Reference point: Opera Neon. Glass, circles, air, grey only.
    ═══════════════════════════════════════════════════════════ */
 
 :root{
-  /* выезд очереди и следующее за ним смещение центра */
+  /* the queue sliding out, and the shift of the centre that follows */
   --slide: 620ms cubic-bezier(.32,.72,0,1);
 
-  /* поверхности */
+  /* surfaces */
   --s-0:#0b0b0c;
   --s-1:#121214;
   --s-2:#191a1d;
   --s-3:#212227;
 
-  /* стекло */
+  /* glass */
   --glass:      rgba(30,31,35,.72);
   --glass-soft: rgba(255,255,255,.05);
   --glass-hi:   rgba(255,255,255,.09);
 
-  /* линии */
+  /* lines */
   --line:    rgba(255,255,255,.09);
   --line-2:  rgba(255,255,255,.15);
   --line-3:  rgba(255,255,255,.26);
 
-  /* текст — контраст держим высоким, это была главная претензия */
+  /* text: contrast stays high, that was the main complaint */
   --tx-1:#f2f2f4;
   --tx-2:#b6b7bd;
   --tx-3:#83848c;
@@ -36,8 +36,44 @@
   --shadow: 0 18px 50px rgba(0,0,0,.55), 0 2px 8px rgba(0,0,0,.4);
   --queue-w: 709px;          /* 788 − 10 % */
 
-  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter",
-          "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-inter: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text",
+                "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-fixel: "Fixel Display", var(--font-inter);
+
+  /* The two families differ in optical size and in rhythm, so each
+     comes with its own correction. --fs is added to every size through
+     calc, --track sets the letter spacing. Fixel looks smaller, so it
+     gets +1px; Inter is tighter, so it gets more spacing. */
+  --font: var(--font-fixel);
+  --fs: 1px;
+  --track: .004em;      /* 0.4 % */
+}
+/* the switch in the settings sets the attribute on html */
+:root[data-font="inter"]{
+  --font: var(--font-inter);
+  --fs: 0px;
+  --track: .008em;      /* 0.8 % */
+}
+
+/* Of the eighteen Fixel faces we take the three the interface uses:
+   400, 500 and 600. The weights 520 and 560 written in the styles are
+   rounded by the browser to the nearest declared one.
+   Inter is variable: one file for every weight instead of three. */
+@font-face{
+  font-family:"Fixel Display"; font-weight:400; font-style:normal; font-display:swap;
+  src:url("FixelDisplay/FixelDisplay-Regular.woff2") format("woff2");
+}
+@font-face{
+  font-family:"Fixel Display"; font-weight:500; font-style:normal; font-display:swap;
+  src:url("FixelDisplay/FixelDisplay-Medium.woff2") format("woff2");
+}
+@font-face{
+  font-family:"Fixel Display"; font-weight:600; font-style:normal; font-display:swap;
+  src:url("FixelDisplay/FixelDisplay-SemiBold.woff2") format("woff2");
+}
+@font-face{
+  font-family:"Inter"; font-weight:100 900; font-style:normal; font-display:swap;
+  src:url("Inter/Inter-VariableFont_opsz,wght.ttf") format("truetype");
 }
 
 *{ box-sizing:border-box; margin:0; padding:0; }
@@ -47,13 +83,14 @@ body{
   background:var(--s-0);
   color:var(--tx-1);
   font-family:var(--font);
-  font-size:14px;
+  font-size:calc(14px + var(--fs));
+  letter-spacing:var(--track);
   line-height:1.5;
   overflow:hidden;
   -webkit-font-smoothing:antialiased;
 }
 
-/* мягкий свет за интерфейсом — единственная «текстура» */
+/* soft light behind the interface, the only texture here */
 body::before{
   content:""; position:fixed; inset:0; z-index:0; pointer-events:none;
   background:
@@ -64,30 +101,34 @@ body::before{
 ::selection{ background:rgba(255,255,255,.22); }
 
 button{ font:inherit; color:inherit; background:none; border:none; cursor:pointer; }
-h1,h2{ font-weight:600; letter-spacing:-.01em; }
+/* headings sit slightly tighter than body text, from the same base */
+h1,h2{ font-weight:600; letter-spacing:calc(var(--track) - .01em); }
 svg{ width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.6;
      stroke-linecap:round; stroke-linejoin:round; }
+/* Phosphor Fill: solid shapes, no strokes at all. The selector has two
+   parts so that beating the rule above does not depend on order. */
+svg.ph{ fill:currentColor; stroke:none; }
 
 *:focus-visible{ outline:2px solid rgba(255,255,255,.5); outline-offset:2px; }
 
 /* ───────────── shell ───────────── */
 .app{ position:relative; z-index:1; height:100%; display:grid; grid-template-rows:1fr; }
 
-/* ───────────── кнопки ───────────── */
+/* ───────────── buttons ───────────── */
 .btn{
   padding:10px 20px; border-radius:999px;
   background:var(--glass-soft); border:1px solid var(--line-2);
-  color:var(--tx-1); font-size:13.5px;
+  color:var(--tx-1); font-size:calc(13.5px + var(--fs));
   transition:background .15s, border-color .15s, transform .1s;
 }
 .btn:hover{ background:var(--glass-hi); border-color:var(--line-3); }
 .btn:active{ transform:translateY(1px); }
 .btn--solid{ background:#fff; color:#0b0b0c; border-color:#fff; font-weight:520; }
 .btn--solid:hover{ background:#e6e6e8; border-color:#e6e6e8; }
-.btn--sm{ padding:7px 14px; font-size:12.5px; }
+.btn--sm{ padding:7px 14px; font-size:calc(12.5px + var(--fs)); }
 .row{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
 
-/* круглые кнопки панели */
+/* the round buttons of the deck */
 .rb{
   display:inline-flex; align-items:center; justify-content:center; gap:7px;
   width:40px; height:40px; flex:none;
@@ -95,13 +136,13 @@ svg{ width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.6;
   transition:background .15s, color .15s;
 }
 .rb:hover{ background:var(--glass-hi); color:var(--tx-1); }
-/* активное состояние показываем самой иконкой, без плашки */
+/* the active state is shown by the icon itself, with no plate */
 .rb.on{ background:transparent; color:#fff; }
 .rb.on svg{ stroke-width:1.9; }
 .rb.on:hover{ background:var(--glass-hi); color:#fff; }
 .rb--sm{ width:32px; height:32px; }
-.rb--sm svg{ width:16px; height:16px; }
-.rb--wide{ width:auto; min-width:40px; padding:0 14px; font-size:13px; }
+.rb--sm svg{ width:17px; height:17px; }
+.rb--wide{ width:auto; min-width:40px; padding:0 14px; font-size:calc(13px + var(--fs)); }
 .rb--main{
   width:52px; height:52px;
   background:#fff; color:#0b0b0c;
@@ -109,12 +150,17 @@ svg{ width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.6;
 }
 .rb--main:hover{ background:#e6e6e8; color:#0b0b0c; }
 .rb--main svg{ width:24px; height:24px; }
-.rb[hidden]{ display:none; }
+/* The hidden attribute has to win over any class. Each button class sets
+   its own display, and that quietly overrides hidden: .rb had a rule of
+   its own for it, .tag did not, and the disk browser button stayed on
+   screen without a server, where pressing it fails. One rule for every
+   element instead of one per class. */
+[hidden]{ display:none !important; }
 
 .tag{
   padding:7px 14px; border-radius:999px;
   background:var(--glass-soft); border:1px solid var(--line);
-  color:var(--tx-2); font-size:12.5px;
+  color:var(--tx-2); font-size:calc(12.5px + var(--fs));
   transition:background .15s, color .15s, border-color .15s;
 }
 .tag:hover{ background:var(--glass-hi); color:var(--tx-1); border-color:var(--line-2); }
@@ -122,11 +168,12 @@ svg{ width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.6;
 .tag--quiet:hover{ color:var(--tx-1); }
 
 /* ───────────── workspace ───────────── */
-/* без overflow:hidden — он обрезал бы меню, всплывающие над панелью.
-   Уехавшую за левый край очередь и так отсекает окно браузера. */
+/* no overflow:hidden here, it would clip the menus that pop up above
+   the deck. A queue slid past the left edge is cut off by the browser
+   window anyway. */
 .workspace{ position:relative; min-height:0; --space:0px; --shift:0px; }
-/* --space — ширина, занятая очередью; --shift — насколько сдвинуть
-   центральные надписи внутри кадра (нужно только в наезжающем режиме) */
+/* --space is the width taken by the queue; --shift is how far to move
+   the centred captions inside the frame, needed only in overlay mode */
 .workspace.queue-open{ --space:var(--queue-w); --shift:var(--queue-w); }
 .workspace.queue-open.queue-docked{ --shift:0px; }
 .workspace:fullscreen{ background:var(--s-0); }
@@ -135,7 +182,7 @@ svg{ width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.6;
   position:absolute; top:0; right:0; bottom:0; left:0;
   overflow:hidden; transition:left var(--slide);
 }
-/* прижатая очередь сужает кадр вместе с панелью управления */
+/* a docked queue narrows the frame together with the deck */
 .workspace.queue-docked .stage-host{ left:var(--space); }
 .workspace.queue-docked .queue{
   background:var(--s-1); backdrop-filter:none; -webkit-backdrop-filter:none;
@@ -146,13 +193,13 @@ svg{ width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.6;
 .stage{ position:absolute; inset:0; background:#000; overflow:hidden; outline:none; }
 .stage video{
   width:100%; height:100%; object-fit:contain; background:#000; display:block;
-  transition:opacity .32s ease;          /* появление нового кадра */
+  transition:opacity .32s ease;          /* the new frame appearing */
 }
-/* уход в чёрный при смене файла; под видео та же чернота сцены */
+/* fade to black when the file changes; under the video, the same black stage */
 .stage.fading video{ opacity:0; transition:opacity .22s ease; }
 .stage.cursor-hidden{ cursor:none; }
 
-/* мягкая подложка сверху — зеркальная нижней, но легче */
+/* soft gradient at the top, mirrors the bottom one but lighter */
 .scrim{
   position:absolute; top:0; left:0; right:0; height:150px;
   background:linear-gradient(to bottom, rgba(0,0,0,.32), rgba(0,0,0,0));
@@ -160,11 +207,11 @@ svg{ width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.6;
   transition:opacity .24s;
 }
 
-/* настройки: правый верхний угол, на одной линии с названием.
-   z-index выше пустого состояния — иначе до загрузки файлов кнопка
-   оказалась бы под ним и не нажималась */
-/* .menuwrap объявлен ниже и тоже задаёт position — берём два класса,
-   чтобы правило не зависело от порядка в файле */
+/* settings: top right corner, on the same line as the title.
+   z-index above the empty state, otherwise before any file is loaded
+   the button would sit under it and take no clicks */
+/* .menuwrap is declared below and also sets position, so the rule
+   takes two classes and stops depending on order in the file */
 .gear.menuwrap{
   position:absolute; top:0; right:0; z-index:9;
   padding:20px 36px;
@@ -172,7 +219,7 @@ svg{ width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.6;
 }
 .stage.idle .gear{ opacity:0; transform:translateY(-8px); pointer-events:none; }
 
-/* имя файла — без подложки и обводки, только текст */
+/* the file name: no plate, no outline, text only */
 .titlechip{
   position:absolute; top:0; left:0;
   max-width:min(70%, 860px);
@@ -182,12 +229,12 @@ svg{ width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.6;
 }
 .titlechip__row{ display:flex; align-items:baseline; gap:9px; min-width:0; }
 .titlechip__name{
-  font-size:15px; font-weight:560; color:#fff;
+  font-size:calc(15px + var(--fs)); font-weight:560; color:#fff;
   text-shadow:0 1px 4px rgba(0,0,0,.9);
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
 }
 .titlechip__path{
-  margin-top:3px; font-size:12px; color:rgba(255,255,255,.52);
+  margin-top:3px; font-size:calc(12px + var(--fs)); color:rgba(255,255,255,.52);
   text-shadow:0 1px 3px rgba(0,0,0,.9);
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   direction:rtl; text-align:left;
@@ -200,7 +247,7 @@ svg{ width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.6;
 .stage.empty .scrim,
 .stage.empty .deck{ display:none; }
 
-/* центральный пульс */
+/* the pulse in the centre */
 .pulse{
   position:absolute; top:50%; left:calc(50% + var(--shift) / 2); margin:-40px 0 0 -40px;
   transition:left var(--slide);
@@ -222,12 +269,12 @@ svg{ width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.6;
   padding:10px 20px; border-radius:999px;
   background:var(--glass); backdrop-filter:blur(16px);
   -webkit-backdrop-filter:blur(16px); border:1px solid var(--line-2);
-  font-size:16px; font-weight:600; font-variant-numeric:tabular-nums;
+  font-size:calc(16px + var(--fs)); font-weight:600; font-variant-numeric:tabular-nums;
   opacity:0; pointer-events:none;
 }
 .flash.go{ opacity:1; }
 
-/* ───────────── уведомление про звук ───────────── */
+/* ───────────── the notice about sound ───────────── */
 .notice{
   position:absolute; top:18px; left:calc(50% + var(--shift) / 2);
   transform:translateX(-50%) translateY(-8px);
@@ -241,36 +288,40 @@ svg{ width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.6;
 }
 .notice.show{ display:flex; opacity:1; transform:translateX(-50%) translateY(0); }
 .notice__ico{ flex:none; width:19px; height:19px; color:var(--tx-2); }
-.notice__text{ flex:1; font-size:13px; color:var(--tx-1); line-height:1.45; }
+.notice__text{ flex:1; font-size:calc(13px + var(--fs)); color:var(--tx-1); line-height:1.45; }
 .notice__act{
   flex:none; padding:6px 14px; border-radius:999px;
-  background:#fff; color:#0b0b0c; font-size:12.5px; font-weight:520;
+  background:#fff; color:#0b0b0c; font-size:calc(12.5px + var(--fs)); font-weight:520;
 }
 .notice__act:hover{ background:#e6e6e8; }
 .notice__x{ flex:none; color:var(--tx-3); display:grid; place-items:center; }
 .notice__x:hover{ color:var(--tx-1); }
 .notice__x svg{ width:16px; height:16px; }
 
-/* ───────────── панель управления ─────────────
-   во всю ширину, вплотную к низу, без рамки: только градиент,
-   50 % внизу и полная прозрачность вверху */
+/* ───────────── control deck ─────────────
+   full width, flush with the bottom, no border: only a gradient,
+   50 % at the bottom and fully transparent at the top */
 .deck{
   position:absolute; left:0; right:0; bottom:0;
   padding:14px 36px 16px;
   transition:opacity .24s, transform .24s;
 }
-/* Подложка вынесена в псевдоэлемент, чтобы её высота считалась от высоты
-   самой панели: top:-60% поднимает её на 60 % этой высоты выше панели. */
+/* The backdrop lives in a pseudo element so its height is measured
+   against the deck itself: top:-60% lifts it 60 % of that height above
+   the deck. */
 .deck::before{
   content:""; position:absolute; left:0; right:0; bottom:0; top:-60%;
   background:linear-gradient(to top, rgba(0,0,0,.7) 0%, rgba(0,0,0,0) 100%);
   pointer-events:none;
 }
-/* строки панели позиционируем, иначе подложка накроет их сверху */
+/* the deck rows are positioned, otherwise the backdrop covers them */
 .deck__scrub, .deck__ctrls{ position:relative; }
 .deck__scrub{ display:flex; align-items:center; gap:14px; padding:0 4px 6px; }
 .deck__t{
-  flex:none; min-width:52px; font-size:12.5px; color:var(--tx-2);
+  flex:none; min-width:52px; font-size:calc(12.5px + var(--fs)); color:var(--tx-2);
+  /* one step heavier than body text: the time is read at a glance and
+     at the previous weight it was lost next to the bar */
+  font-weight:500;
   font-variant-numeric:tabular-nums;
 }
 .deck__t--dim{ color:var(--tx-3); text-align:right; }
@@ -279,16 +330,22 @@ svg{ width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.6;
   display:grid; grid-template-columns:1fr auto 1fr;
   align-items:center; gap:12px;
 }
-.deck__side{ display:flex; align-items:center; gap:4px; min-width:0; }
+/* Inside a group the buttons sit tight together, between groups there
+   is a visible gap. There used to be one gap for everything, and the
+   left side read as five unrelated buttons in a row.
+   Left:  [queue] · [track, subtitles]
+   Right: [volume, speed] · [loop, autoplay] · [PiP, screen] */
+.deck__side{ display:flex; align-items:center; gap:14px; min-width:0; }
+.deck__grp{ display:flex; align-items:center; gap:4px; min-width:0; }
 .deck__side--left{ justify-self:start; }
 .deck__side--right{ justify-self:end; }
 .deck__center{ display:flex; align-items:center; gap:6px; justify-self:center; }
 #audioLabel{ max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
-/* распорка внутри строки инструментов */
+/* the spacer inside the toolbar row */
 .spacer{ flex:1; }
 
-/* ───────────── таймлайн ───────────── */
+/* ───────────── timeline ───────────── */
 .seek{ position:relative; flex:1; height:26px; display:flex; align-items:center; cursor:pointer; touch-action:none; }
 .seek__rail{
   position:relative; width:100%; height:4px; border-radius:999px;
@@ -312,14 +369,23 @@ svg{ width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.6;
   background:rgba(20,21,24,.94); backdrop-filter:blur(14px);
   -webkit-backdrop-filter:blur(14px);
   border:1px solid var(--line-2);
-  font-size:12px; color:var(--tx-1); white-space:nowrap;
+  font-size:calc(12px + var(--fs)); color:var(--tx-1); white-space:nowrap;
   font-variant-numeric:tabular-nums;
   opacity:0; pointer-events:none; transition:opacity .15s;
 }
 .seek:hover .seek__tip, .seek.dragging .seek__tip{ opacity:1; }
 
-/* ───────────── громкость ───────────── */
-.vol{ display:flex; align-items:center; gap:2px; }
+/* ───────────── volume ───────────── */
+/* The backdrop covers the whole group: without it the slider opened on
+   hover but the background appeared under the button alone, which stood
+   out in the row. */
+.vol{
+  display:flex; align-items:center; gap:2px;
+  border-radius:999px; transition:background .15s;
+}
+.vol:hover{ background:var(--glass-hi); }
+.vol:hover .rb{ color:var(--tx-1); }
+.vol:hover .rb:hover{ background:transparent; }
 .vol__bar{
   width:0; opacity:0; height:26px; display:flex; align-items:center;
   cursor:pointer; touch-action:none; transition:width .2s, opacity .2s;
@@ -328,8 +394,12 @@ svg{ width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.6;
 .vol__rail{ width:100%; height:4px; border-radius:999px; background:rgba(255,255,255,.16); overflow:hidden; }
 .vol__fill{ height:100%; background:#fff; }
 
-/* ───────────── меню дорожек ───────────── */
-.menuwrap{ position:relative; }
+/* ───────────── track menu ───────────── */
+/* The button inside is inline-flex, and in a block wrapper it sat on
+   the text baseline: the wrapper grew taller than the button by the
+   space under the line, and the button drifted down relative to its
+   neighbours. Flex removes the inline context entirely. */
+.menuwrap{ position:relative; display:flex; align-items:center; }
 .menu{
   position:absolute; bottom:calc(100% + 12px); right:0;
   min-width:340px; max-width:min(440px, calc(100vw - 24px));
@@ -342,11 +412,11 @@ svg{ width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.6;
   display:none;
 }
 .menu.open{ display:block; }
-.menu__title{ padding:8px 12px 6px; font-size:11.5px; color:var(--tx-3); }
+.menu__title{ padding:8px 12px 6px; font-size:calc(11.5px + var(--fs)); color:var(--tx-3); }
 .menu__item{
   display:flex; align-items:flex-start; gap:11px; width:100%;
   padding:10px 12px; border-radius:var(--r-sm);
-  text-align:left; color:var(--tx-2); font-size:13px;
+  text-align:left; color:var(--tx-2); font-size:calc(13px + var(--fs));
 }
 .menu__item:hover{ background:var(--glass-hi); color:var(--tx-1); }
 .menu__item.sel{ background:var(--glass-hi); color:var(--tx-1); }
@@ -354,17 +424,17 @@ svg{ width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.6;
 .menu__item.sel .menu__tick{ opacity:1; }
 .menu__body{ flex:1; min-width:0; }
 .menu__main{ display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.menu__sub{ display:block; font-size:11.5px; color:var(--tx-3); margin-top:3px; line-height:1.45; }
-.menu__empty{ padding:14px 12px; font-size:12.5px; color:var(--tx-3); line-height:1.6; }
+.menu__sub{ display:block; font-size:calc(11.5px + var(--fs)); color:var(--tx-3); margin-top:3px; line-height:1.45; }
+.menu__empty{ padding:14px 12px; font-size:calc(12.5px + var(--fs)); color:var(--tx-3); line-height:1.6; }
 .menu__item:disabled{ opacity:.42; cursor:default; }
 .menu__item:disabled:hover{ background:none; color:var(--tx-2); }
 
-/* влево — для меню в левой группе панели */
+/* to the left, for menus in the left group of the deck */
 .menu--left{ left:0; right:auto; }
-/* вниз — для меню шестерёнки, она сама вверху сцены */
+/* downwards, for the gear menu, which sits at the top of the stage */
 .menu--down{ top:calc(100% + 10px); bottom:auto; }
 
-/* PiP и шеврон как один элемент: скругление только по внешним краям */
+/* PiP and the chevron as one element: rounded on the outer edges only */
 .seg{ display:flex; align-items:stretch; border-radius:999px; }
 .seg .rb{ border-radius:0; }
 .seg .rb:hover{ background:transparent; }
@@ -377,11 +447,11 @@ svg{ width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.6;
 .seg.on svg{ stroke-width:1.9; }
 .seg.on:hover{ background:var(--glass-hi); }
 
-/* пометка о том, как файл попадает в плеер */
+/* a mark showing how the file reaches the player */
 .route{ color:var(--tx-2); font-weight:400; }
 .route--off{ color:var(--tx-3); }
 
-/* ───────────── конец очереди ───────────── */
+/* ───────────── end of queue ───────────── */
 .endcard{
   position:absolute; inset:0;
   padding-left:var(--shift);
@@ -401,10 +471,10 @@ svg{ width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.6;
   border-radius:50%; border:1px solid var(--line-2);
   display:grid; place-items:center; color:var(--tx-2);
 }
-.endcard h2{ font-size:19px; margin-bottom:6px; }
-.endcard p{ font-size:13px; color:var(--tx-3); margin-bottom:24px; }
+.endcard h2{ font-size:calc(19px + var(--fs)); margin-bottom:6px; }
+.endcard p{ font-size:calc(13px + var(--fs)); color:var(--tx-3); margin-bottom:24px; }
 
-/* ───────────── пустое состояние ───────────── */
+/* ───────────── empty state ───────────── */
 .empty{
   position:absolute; inset:0;
   padding-left:var(--shift);
@@ -414,26 +484,125 @@ svg{ width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.6;
 }
 .empty.hide{ display:none; }
 .empty__box{ text-align:center; max-width:520px; padding:0 24px; }
-.empty__ring{
-  width:76px; height:76px; margin:0 auto 26px;
-  border-radius:50%; border:1px solid var(--line-2);
-  position:relative;
-}
-.empty__ring::before, .empty__ring::after{
-  content:""; position:absolute; inset:0; margin:auto; border-radius:50%;
-}
-.empty__ring::before{ width:44px; height:44px; border:1px solid var(--line-2); }
-.empty__ring::after{ width:12px; height:12px; background:var(--tx-1); }
-.empty h1{ font-size:23px; margin-bottom:12px; }
-.empty p{ font-size:14px; color:var(--tx-3); line-height:1.7; margin-bottom:28px; }
-.empty__hint{ margin-top:26px; font-size:12.5px; color:var(--tx-3); line-height:1.7; }
+
+.empty h1{ font-size:calc(23px + var(--fs)); margin-bottom:12px; }
+.empty p{ font-size:calc(14px + var(--fs)); color:var(--tx-3); line-height:1.53; margin-bottom:28px; }
+/* the hint about the current mode, under the start screen buttons */
+.empty__hint{ margin-top:26px; font-size:calc(12.5px + var(--fs)); color:var(--tx-3); line-height:1.53; }
 .empty__hint b{ color:var(--tx-2); font-weight:500; }
 .empty__hint code{
-  font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12px;
+  font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:calc(12px + var(--fs));
   padding:2px 7px; border-radius:6px; background:var(--glass-hi); color:var(--tx-1);
 }
+/* ───────────── symbol and wordmark ─────────────
+   The symbol and the wordmark are the same file in two roles, hence one
+   base and two modifiers. */
+/* The mark on the start screen links to the MythHand site and opens it
+   in a new tab. The one in the queue footer does not: it sits next to
+   working buttons while an episode plays, and a stray click there would
+   pull the viewer into another tab. */
+/* One lockup for both places. The wordmark and the gap are fractions of
+   the symbol, taken from the start screen (23, 16, 11): set separately,
+   the footer came out with a larger wordmark set further away. */
+.brand{
+  --sym:23px; --word:calc(var(--sym) * 16 / 23); --gap:calc(var(--sym) * 11 / 23);
+  display:inline-flex; align-items:center; color:var(--tx-1); text-decoration:none;
+}
+.brand:focus-visible{ opacity:1; outline:2px solid var(--line-3); outline-offset:4px; border-radius:4px; }
+.brand__sym-i, .brand__word-i{ width:auto; fill:currentColor; stroke:none; }
+.brand__sym-i{ height:var(--sym); }
+.brand__word-i{ height:var(--word); }
 
-/* ───────────── ghost (пока идёт PiP) ───────────── */
+/* the row on the start screen: nearly transparent, appears under the cursor */
+.brand--wide{
+  gap:var(--gap); margin-bottom:24px;
+  opacity:.18; transition:opacity .22s;
+}
+.brand--wide:hover{ opacity:1; }
+
+/* The symbol in the queue footer. The wordmark slides out over the
+   neighbouring text rather than pushing it aside: it stays out of the
+   flow, otherwise the footer would jump on every hover. */
+/* the symbol and the counter are one group, otherwise in the footer's
+   space-between the symbol becomes a third item and pulls the row apart */
+.queue__side{ display:flex; align-items:center; gap:13px; min-width:0; }
+.brand--mini{ --sym:16px; position:relative; flex:none; opacity:.3; transition:opacity .22s; }
+.brand--mini:hover{ opacity:1; }
+.brand__word{
+  /* centred by layout, as on the start screen: a translate(-50%) put it
+     on fractional pixels, off the grid the symbol is drawn on */
+  position:absolute; left:100%; top:-3px; bottom:-3px;
+  display:flex; align-items:center;
+  /* the gap to the symbol is the backdrop's padding */
+  padding:0 8px 0 var(--gap); border-radius:7px;
+  /* a backdrop in the panel colour: the wordmark slides out over the
+     counter, and without it the two overlap and neither can be read */
+  background:rgba(16,17,20,.97);
+  pointer-events:none; white-space:nowrap;
+  opacity:0; transform:translateX(-7px);
+  transition:opacity .22s, transform .22s;
+}
+.brand--mini:hover .brand__word{ opacity:1; transform:none; }
+
+/* ───────────── the project description in an empty queue ─────────────
+   While there are no files, the left panel is the most visible place in
+   the window and it stands empty. At the top, what is needed right now;
+   below the divider, what the player is. */
+.queue__about{ padding:22px 24px 34px; color:var(--tx-3); }
+/* the invitation to drop files comes first and quietly: it is a hint,
+   not part of the description */
+.queue__about .queue__drop{
+  font-size:calc(12.5px + var(--fs)); line-height:1.39; color:var(--tx-3); opacity:.75;
+}
+.queue__rule{ height:1px; border:0; background:var(--line); margin:18px 0 22px; }
+.queue__about h2{
+  font-size:calc(15.5px + var(--fs)); font-weight:560; line-height:1.35;
+  color:var(--tx-1); margin-bottom:16px;
+}
+.queue__lede{
+  font-size:calc(12.5px + var(--fs)); line-height:1.48; margin-bottom:13px;
+}
+/* One particular case. It sits at the end of the description and is
+   styled as a note: an example, not part of the main text. */
+.queue__case{
+  margin:18px 0 4px; padding:12px 14px;
+  border-left:2px solid var(--line-3); border-radius:0 8px 8px 0;
+  background:var(--glass-soft);
+  font-size:calc(12px + var(--fs)); line-height:1.48; color:var(--tx-3);
+}
+.queue__repo{
+  display:inline-flex; align-items:center; gap:5px; white-space:nowrap;
+  color:var(--tx-1); transition:color .15s;
+}
+.queue__repo:hover{ color:#fff; }
+.queue__repo svg{ width:13px; height:13px; }
+
+/* the feature list under a heading of its own */
+.queue__featshead{
+  font-size:calc(13.5px + var(--fs)); font-weight:560; color:var(--tx-1);
+  margin:26px 0 4px;
+}
+.queue__feats h4{
+  font-size:calc(11.5px + var(--fs)); font-weight:500;
+  letter-spacing:calc(var(--track) + .04em); text-transform:uppercase;
+  color:var(--tx-2); margin:18px 0 9px;
+}
+.queue__feats ul{ list-style:none; }
+.queue__feats li{
+  position:relative; padding-left:15px; margin-bottom:7px;
+  font-size:calc(12px + var(--fs)); line-height:1.39;
+}
+.queue__feats li::before{
+  content:''; position:absolute; left:2px; top:.62em;
+  width:4px; height:4px; border-radius:1px; background:var(--tx-3);
+}
+/* sub-points belong to the point above: indented under its text, marked
+   with a short dash instead of the square, one step quieter */
+.queue__feats li ul{ margin-top:6px; }
+.queue__feats li li{ margin-bottom:5px; color:var(--tx-3); }
+.queue__feats li li::before{ top:.7em; width:6px; height:1px; border-radius:0; }
+
+/* ───────────── ghost (while PiP is running) ───────────── */
 .ghost{
   position:absolute; inset:0;
   padding-left:var(--shift);
@@ -443,8 +612,8 @@ svg{ width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.6;
 .stage-host.is-pip .ghost{ display:grid; }
 .ghost__box{ text-align:center; }
 .ghost__eq{ display:flex; gap:5px; justify-content:center; align-items:center; height:34px; margin-bottom:22px; }
-/* анимируем transform, а не height: высота дёргает раскладку каждый
-   кадр, трансформация обходится одним композитором */
+/* transform is animated rather than height: height reflows the layout
+   on every frame, a transform stays on the compositor */
 .ghost__eq i{
   width:4px; height:30px; border-radius:999px; background:var(--tx-2);
   transform:scaleY(.27);
@@ -453,14 +622,14 @@ svg{ width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.6;
 .ghost__eq i:nth-child(2){ animation-delay:.14s } .ghost__eq i:nth-child(3){ animation-delay:.28s }
 .ghost__eq i:nth-child(4){ animation-delay:.42s } .ghost__eq i:nth-child(5){ animation-delay:.56s }
 @keyframes eq{ 0%,100%{ transform:scaleY(.27); opacity:.45 } 50%{ transform:scaleY(1); opacity:1 } }
-.ghost__label{ font-size:13px; color:var(--tx-2); margin-bottom:6px; }
+.ghost__label{ font-size:calc(13px + var(--fs)); color:var(--tx-2); margin-bottom:6px; }
 .ghost__name{
-  font-size:15px; font-weight:500; margin-bottom:26px;
+  font-size:calc(15px + var(--fs)); font-weight:500; margin-bottom:26px;
   max-width:46ch; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
 }
 
-/* ───────────── очередь ───────────── */
-/* панель наезжает на видео, а не отжимает его */
+/* ───────────── queue ───────────── */
+/* the panel overlays the video instead of pushing it aside */
 .queue{
   position:absolute; left:0; top:0; bottom:0; z-index:14;
   width:var(--queue-w); max-width:100%;
@@ -475,17 +644,109 @@ svg{ width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.6;
 }
 .workspace.queue-open .queue{ transform:none; }
 .queue__tools{
-  display:flex; gap:7px; align-items:center;
+  /* more room outside than inside a group, otherwise the next group's
+     label sticks to the previous group's buttons */
+  display:flex; gap:20px; align-items:center;
   padding:12px 12px 12px 16px; border-bottom:1px solid var(--line);
 }
+
+/* A labelled group: without it two clusters of icons stand side by side
+   and it is unclear where one ends and the next begins. */
+.toolgrp{ display:flex; align-items:center; gap:8px; }
+.toolgrp__cap{
+  font-size:calc(11.5px + var(--fs)); color:var(--tx-3); white-space:nowrap;
+}
+
+/* A segmented group: three separate pills with text read as three
+   unrelated decisions and took up the whole row. Icons in one cluster
+   with dividers show at once that this is a single set of actions. */
+.segbar{
+  display:flex; align-items:stretch;
+  border:1px solid var(--line); border-radius:10px;
+  background:var(--glass-soft); overflow:hidden;
+}
+.segbar__b{
+  position:relative;
+  display:flex; align-items:center; justify-content:center;
+  width:32px; height:28px; color:var(--tx-3);
+  transition:background .15s, color .15s;
+}
+.segbar__b + .segbar__b{ border-left:1px solid var(--line); }
+/* Size only: fill and stroke come from svg.ph, and overriding them
+   here makes the icon disappear.
+
+   The queue header is secondary chrome, so its icons are smaller than
+   the ones on the deck. At 19px they measured the same ink as the deck
+   row and read as a second set of main controls. 16px puts the whole
+   queue panel, header and footer, on one step below the deck. */
+.segbar__b svg{ width:16px; height:16px; }
+.queue__tools .rb--sm svg{ width:15px; height:15px; }
+.segbar__b:hover{ background:var(--glass-hi); color:var(--tx-1); }
+/* the chosen view: white icon and an underline, no plate, the same
+   decision as on the deck buttons */
+.segbar__b.on{ color:#fff; }
+.segbar__b.on::after{
+  content:''; position:absolute; inset:auto 6px 0 6px; height:2px;
+  border-radius:2px 2px 0 0; background:#fff;
+}
+
+/* ───────────── queue as tiles ─────────────
+   The second view of the list: thumbnails only, the name comes as a
+   tooltip. The grid follows the width of the panel, so there can be
+   between two and five columns; a fixed number would break in a narrow
+   window. */
+.queue__list--grid{
+  display:grid; gap:8px; padding:12px;
+  grid-template-columns:repeat(auto-fill, minmax(124px, 1fr));
+  align-content:start;
+}
+.tile{
+  position:relative; aspect-ratio:1; border-radius:10px;
+  background:var(--glass-soft); border:1px solid var(--line);
+  overflow:hidden; cursor:pointer;
+  transition:border-color .18s, transform .18s;
+}
+.tile:hover{ border-color:var(--line-3); }
+/* The frame is a background rather than an img element. While dragging,
+   the browser takes a ghost image of the tile, and object-fit is not
+   applied in that snapshot, so the frame arrived squashed into a square.
+   A background is painted the usual way and reaches the ghost already
+   cropped. */
+.tile{ background-size:cover; background-position:center; }
+/* until the thumbnail arrives, the file name keeps the tile from being empty */
+.tile__name{
+  position:absolute; inset:0; display:flex; align-items:center;
+  padding:10px; font-size:calc(11px + var(--fs)); line-height:1.35; color:var(--tx-3);
+  overflow:hidden; text-align:center;
+}
+.tile.has-thumb .tile__name{ display:none; }
+.tile.active{ border-color:#fff; }
+.tile.active::after{
+  content:''; position:absolute; inset:0; border-radius:9px;
+  box-shadow:inset 0 0 0 2px #fff; pointer-events:none;
+}
+.tile.bad{ opacity:.45; }
+/* the same equaliser as in the rows, but over the picture */
+.tile__eq{
+  position:absolute; left:8px; bottom:8px; display:none;
+  align-items:flex-end; gap:2px; height:12px;
+  padding:4px 5px; border-radius:5px; background:rgba(0,0,0,.62);
+}
+.tile.playing .tile__eq{ display:flex; }
+.tile__eq i{
+  width:2px; height:100%; background:#fff; border-radius:1px;
+  transform-origin:50% 100%; animation:eq .9s ease-in-out infinite;
+}
+.tile__eq i:nth-child(2){ animation-name:eq2; animation-duration:1.1s; }
+.tile__eq i:nth-child(3){ animation-delay:.25s; }
 .queue__list{ flex:1; overflow-y:auto; overflow-x:hidden; list-style:none; }
 .queue__list::-webkit-scrollbar{ width:10px; }
 .queue__list::-webkit-scrollbar-track{ background:transparent; }
 .queue__list::-webkit-scrollbar-thumb{ background:rgba(255,255,255,.16); border-radius:99px; border:3px solid transparent; background-clip:padding-box; }
 .queue__list::-webkit-scrollbar-thumb:hover{ background:rgba(255,255,255,.24); }
 
-/* Строка — сплошная линия во всю ширину: при скруглении и боковых
-   отступах метка места вставки выглядела обрубком. */
+/* A row is a solid line across the full width: with rounded corners and
+   side padding the insertion marker looked like a stub. */
 .item{
   display:flex; align-items:flex-start; gap:14px;
   padding:12px 16px;
@@ -494,7 +755,7 @@ svg{ width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.6;
 }
 .item:hover{ background:rgba(255,255,255,.04); }
 .item.active{ background:rgba(255,255,255,.10); }
-/* перетаскиваемая строка остаётся на месте вставки и читается как слот */
+/* the dragged row stays at the insertion point and reads as a slot */
 .item.dragging{
   background:rgba(255,255,255,.05);
   box-shadow:inset 0 0 0 1px rgba(255,255,255,.16);
@@ -511,25 +772,25 @@ svg{ width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.6;
 
 .item__body{ flex:1; min-width:0; }
 .item__name{
-  font-size:14px; color:var(--tx-2); line-height:1.45;
+  font-size:calc(14px + var(--fs)); color:var(--tx-2); line-height:1.45;
   transition:color .26s ease;
   white-space:normal;
-  overflow-wrap:anywhere;   /* режем даже сплошную строку без пробелов */
+  overflow-wrap:anywhere;   /* break even a solid run with no spaces */
   word-break:break-word;
 }
 .item__meta{
   display:flex; flex-wrap:wrap; gap:4px 14px; margin-top:5px;
-  font-size:12px; color:var(--tx-3);
+  font-size:calc(12px + var(--fs)); color:var(--tx-3);
   min-width:0;
 }
 .item.active .item__name{ color:#fff; }
 .item__meta b{ font-weight:400; color:var(--tx-2); }
-/* длительность и вес — фиксированной ширины, чтобы столбцы не плясали */
+/* duration and size have a fixed width so the columns do not dance */
 .item__m{ flex:none; font-variant-numeric:tabular-nums; }
 .item__m--dur{ width:64px; }
 .item__m--size{ width:74px; }
 
-/* место под индикатор занято всегда, иначе строка дёргается */
+/* the space for the indicator is always taken, otherwise the row jumps */
 .item__eq{ display:flex; gap:2.5px; align-items:center; height:14px; flex:none; width:16px;
   margin-top:7px; opacity:0; transition:opacity .26s ease; }
 .item.active .item__eq{ opacity:1; }
@@ -549,16 +810,15 @@ svg{ width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.6;
 .queue__foot{
   display:flex; align-items:center; justify-content:space-between; gap:12px;
   padding:12px 16px; border-top:1px solid var(--line);
-  font-size:12.5px; color:var(--tx-3); font-variant-numeric:tabular-nums;
+  font-size:calc(12.5px + var(--fs)); color:var(--tx-3); font-variant-numeric:tabular-nums;
   flex-wrap:wrap;
 }
-.queue__sum{ display:flex; flex-direction:column; gap:2px; line-height:1.35; }
+.queue__sum{ display:flex; flex-direction:column; gap:0; line-height:1.35; }
 .queue__add{ display:flex; gap:7px; flex-wrap:wrap; }
 .queue__add .tag{ display:inline-flex; align-items:center; gap:7px; }
 .queue__add svg{ width:15px; height:15px; }
-.queue__empty{ padding:56px 20px; text-align:center; color:var(--tx-3); font-size:13.5px; line-height:1.8; }
 
-/* ───────────── модалки ───────────── */
+/* ───────────── modals ───────────── */
 .modal{
   position:fixed; inset:0; z-index:40;
   display:none; place-items:center; padding:32px;
@@ -578,27 +838,27 @@ svg{ width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.6;
   display:flex; align-items:center; justify-content:space-between;
   padding:18px 18px 16px 24px; border-bottom:1px solid var(--line);
 }
-.modal__head h2{ font-size:17px; }
+.modal__head h2{ font-size:calc(17px + var(--fs)); }
 
 .prose{ padding:24px; overflow-y:auto; }
-.prose p{ font-size:14px; color:var(--tx-2); line-height:1.75; margin-bottom:16px; }
+.prose p{ font-size:calc(14px + var(--fs)); color:var(--tx-2); line-height:1.57; margin-bottom:16px; }
 .prose b{ color:var(--tx-1); font-weight:560; }
-.prose__dim{ color:var(--tx-3) !important; font-size:13px !important; margin-bottom:0 !important; }
+.prose__dim{ color:var(--tx-3) !important; font-size:calc(13px + var(--fs)) !important; margin-bottom:0 !important; }
 .code{
   font-family:ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size:13px; color:var(--tx-1);
+  font-size:calc(13px + var(--fs)); color:var(--tx-1);
   padding:14px 18px; border-radius:var(--r-md); margin-bottom:16px;
   background:var(--s-0); border:1px solid var(--line);
   user-select:all; word-break:break-all;
 }
 
-/* обзор диска */
+/* disk browser */
 .browser{ display:grid; grid-template-columns:220px 1fr; min-height:0; flex:1; }
 .browser__places{ border-right:1px solid var(--line); padding:10px; overflow-y:auto; }
 .browser__main{ display:flex; flex-direction:column; min-width:0; }
 .browser__bar{ display:flex; align-items:center; gap:12px; padding:12px 16px; border-bottom:1px solid var(--line); }
 .browser__path{
-  flex:1; min-width:0; font-size:12.5px; color:var(--tx-3);
+  flex:1; min-width:0; font-size:calc(12.5px + var(--fs)); color:var(--tx-3);
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; direction:rtl; text-align:left;
 }
 .browser__list{ flex:1; overflow-y:auto; list-style:none; padding:10px; }
@@ -609,14 +869,14 @@ svg{ width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.6;
 .brow{
   display:flex; align-items:center; gap:12px; width:100%;
   padding:10px 12px; border-radius:var(--r-sm);
-  color:var(--tx-2); font-size:13.5px; text-align:left;
+  color:var(--tx-2); font-size:calc(13.5px + var(--fs)); text-align:left;
 }
 .brow:hover{ background:var(--glass-hi); color:var(--tx-1); }
 .brow.sel{ background:var(--glass-hi); color:var(--tx-1); }
 .brow svg{ width:17px; height:17px; flex:none; color:var(--tx-3); }
 .brow__name{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.brow__size{ flex:none; font-size:12px; color:var(--tx-3); font-variant-numeric:tabular-nums; }
-.browser__empty{ padding:48px 20px; text-align:center; color:var(--tx-3); font-size:13px; }
+.brow__size{ flex:none; font-size:calc(12px + var(--fs)); color:var(--tx-3); font-variant-numeric:tabular-nums; }
+.browser__empty{ padding:48px 20px; text-align:center; color:var(--tx-3); font-size:calc(13px + var(--fs)); }
 
 /* ───────────── drop / toast ───────────── */
 .dropveil{
@@ -627,7 +887,7 @@ svg{ width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.6;
 .dropveil.show{ display:grid; }
 .dropveil__box{
   padding:46px 64px; border-radius:var(--r-xl);
-  border:2px dashed var(--line-3); color:var(--tx-1); font-size:16px;
+  border:2px dashed var(--line-3); color:var(--tx-1); font-size:calc(16px + var(--fs));
 }
 
 .toast{
@@ -636,17 +896,17 @@ svg{ width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.6;
   background:rgba(24,25,28,.95); backdrop-filter:blur(20px);
   -webkit-backdrop-filter:blur(20px);
   border:1px solid var(--line-2); box-shadow:var(--shadow);
-  font-size:13.5px; color:var(--tx-1);
+  font-size:calc(13.5px + var(--fs)); color:var(--tx-1);
   opacity:0; pointer-events:none; transition:opacity .22s, transform .22s;
   max-width:min(90vw, 560px); text-align:center;
 }
 .toast.show{ opacity:1; transform:translate(-50%, 0); }
 
-/* ───────────── полный экран ───────────── */
+/* ───────────── fullscreen ───────────── */
 .workspace:fullscreen .stage{ background:#000; }
 
 /* ═══════════════════════════════════════════════════════════
-   PiP-окно: сюда переезжает .stage целиком
+   The PiP window: .stage moves here whole
    ═══════════════════════════════════════════════════════════ */
 body.pip-body{ background:#000; overflow:hidden; height:100vh; }
 body.pip-body::before{ display:none; }
@@ -655,24 +915,30 @@ body.pip-body::before{ display:none; }
 .stage.pip-mode .hide-in-pip{ display:none !important; }
 .stage.pip-mode .deck{ padding:8px 14px 8px; }
 .stage.pip-mode .deck__scrub{ gap:9px; padding:0 2px 3px; }
-.stage.pip-mode .deck__t{ min-width:40px; font-size:11px; }
+.stage.pip-mode .deck__t{ min-width:40px; font-size:calc(11px + var(--fs)); }
 .stage.pip-mode .seek{ height:20px; }
 .stage.pip-mode .rb{ width:32px; height:32px; }
+/* in a narrow window the gap between groups has to shrink */
+.stage.pip-mode .deck__side{ gap:8px; }
 .stage.pip-mode .rb svg{ width:17px; height:17px; }
 .stage.pip-mode .rb--main{ width:38px; height:38px; }
 .stage.pip-mode .rb--main svg{ width:19px; height:19px; }
-.stage.pip-mode .rb--wide{ padding:0 10px; font-size:12px; }
-.stage.pip-mode .vol{ display:none; }
+.stage.pip-mode .rb--wide{ padding:0 10px; font-size:calc(12px + var(--fs)); }
+/* In the extended mode the whole player moves into the floating window,
+   and the point of that mode is having its own controls. Volume matters
+   there as much as in the main window, so what shrinks is the length of
+   the slider, not the control. */
+.stage.pip-mode .vol:hover .vol__bar, .stage.pip-mode .vol__bar:focus-visible{ width:54px; }
 .stage.pip-mode .titlechip{ padding:8px 14px; max-width:calc(100% - 20px); }
-.stage.pip-mode .titlechip__name{ font-size:12.5px; }
+.stage.pip-mode .titlechip__name{ font-size:calc(12.5px + var(--fs)); }
 .stage.pip-mode .titlechip__path{ display:none; }
 .stage.pip-mode .scrim{ height:80px; }
-.stage.pip-mode .notice{ top:8px; font-size:12px; }
+.stage.pip-mode .notice{ top:8px; font-size:calc(12px + var(--fs)); }
 .stage.pip-mode .pulse{ width:56px; height:56px; margin:-28px 0 0 -28px; }
 .stage.pip-mode .pulse svg{ width:22px; height:22px; }
 .stage.pip-mode .endcard__box{ padding:20px 26px; }
-.stage.pip-mode .endcard h2{ font-size:14px; }
-/* шеврон скрыт — кнопка обязана снова стать круглой */
+.stage.pip-mode .endcard h2{ font-size:calc(14px + var(--fs)); }
+/* the chevron is hidden, so the button has to be round again */
 .stage.pip-mode .seg__main{ width:32px; padding-left:0; border-radius:999px; }
 .stage.pip-mode .menu{
   min-width:180px; max-width:calc(100vw - 16px);
@@ -682,9 +948,9 @@ body.pip-body::before{ display:none; }
 
 
 
-/* ───────────── подготовка файла ─────────────
-   z-index выше панели управления: иначе меню дорожек всплывало
-   поверх оверлея */
+/* ───────────── preparing a file ─────────────
+   z-index above the deck, otherwise the track menu popped up over the
+   overlay */
 .prep{
   position:absolute; inset:0;
   padding-left:var(--shift);
@@ -697,7 +963,7 @@ body.pip-body::before{ display:none; }
 .prep__box{ width:min(560px, 86%); }
 .prep__head{
   display:flex; align-items:center; gap:11px;
-  font-size:13px; color:var(--tx-2); margin-bottom:7px;
+  font-size:calc(13px + var(--fs)); color:var(--tx-2); margin-bottom:7px;
 }
 .spin{
   width:15px; height:15px; flex:none; border-radius:50%;
@@ -706,15 +972,15 @@ body.pip-body::before{ display:none; }
 }
 @keyframes spin{ to{ transform:rotate(360deg) } }
 .prep__name{
-  font-size:16px; font-weight:560; color:var(--tx-1);
+  font-size:calc(16px + var(--fs)); font-weight:560; color:var(--tx-1);
   overflow-wrap:anywhere;
 }
 .prep__steps{ list-style:none; display:flex; flex-direction:column; gap:9px; }
-.step{ display:flex; align-items:center; gap:11px; font-size:13px; color:var(--tx-3); }
+.step{ display:flex; align-items:center; gap:11px; font-size:calc(13px + var(--fs)); color:var(--tx-3); }
 .step__mark{
   flex:none; width:16px; height:16px; border-radius:50%;
   border:1px solid var(--line-2);
-  display:grid; place-items:center; font-size:10px; color:var(--tx-3);
+  display:grid; place-items:center; font-size:calc(10px + var(--fs)); color:var(--tx-3);
 }
 .step__text{ flex:1; min-width:0; }
 .step__aux{ flex:none; font-variant-numeric:tabular-nums; color:var(--tx-3); }
@@ -730,21 +996,21 @@ body.pip-body::before{ display:none; }
   margin-top:20px; padding:12px 14px; border-radius:var(--r-sm);
   background:rgba(0,0,0,.45); border:1px solid var(--line);
   font-family:ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size:11.5px; line-height:1.6; color:var(--tx-3);
+  font-size:calc(11.5px + var(--fs)); line-height:1.6; color:var(--tx-3);
   overflow-wrap:anywhere; max-height:96px; overflow-y:auto;
 }
 .prep__cmd:empty{ display:none; }
-.prep__note{ margin-top:18px; font-size:12px; color:var(--tx-3); line-height:1.6; }
+.prep__note{ margin-top:18px; font-size:calc(12px + var(--fs)); color:var(--tx-3); line-height:1.44; }
 .stage.pip-mode .prep__note,
 .stage.pip-mode .prep__cmd,
 .stage.pip-mode .prep__head span:last-child{ display:none; }
-.stage.pip-mode .prep__name{ font-size:12px; margin-bottom:12px; }
-.stage.pip-mode .step{ font-size:11px; }
+.stage.pip-mode .prep__name{ font-size:calc(12px + var(--fs)); margin-bottom:12px; }
+.stage.pip-mode .step{ font-size:calc(11px + var(--fs)); }
 
-/* ───────────── субтитры ─────────────
-   ::cue по умолчанию рисуется белым по чёрной плашке; для тёмного
-   интерфейса убираем плашку и держим читаемость обводкой */
-.ico-gear{ stroke-width:1.35; stroke-linejoin:round; }
+/* ───────────── subtitles ─────────────
+   ::cue is drawn by default as white on a black plate; for a dark
+   interface the plate goes and legibility comes from an outline */
+.ico-gear{ fill:currentColor; stroke:none; }
 
 video::cue{
   background:var(--cue-bg, transparent);
@@ -754,29 +1020,71 @@ video::cue{
   text-shadow:var(--cue-shadow, 0 1px 3px #000, 0 0 6px rgba(0,0,0,.95));
 }
 
-/* переключатели настроек внутри меню */
-/* подпись над вариантами: в одну строку они не помещались */
+/* setting switches inside the menu */
+/* the label above the options: they did not fit on one line */
 .menu__row{ display:flex; flex-direction:column; gap:9px; padding:12px; }
 .menu__row + .menu__row{ border-top:1px solid rgba(255,255,255,.055); }
 .menu__rowlabel{
-  font-size:12.5px; line-height:1.4; color:var(--tx-2);
+  font-size:calc(12.5px + var(--fs)); line-height:1.4; color:var(--tx-2);
 }
 .seg2{ display:flex; gap:6px; }
 .seg2 button{
   flex:1; min-width:0; padding:8px 6px; border-radius:9px;
   border:1px solid var(--line); background:transparent;
-  color:var(--tx-2); font-size:12px; line-height:1.35;
+  color:var(--tx-2); font-size:calc(12px + var(--fs)); line-height:1.35;
   transition:background .14s, color .14s, border-color .14s;
 }
 .seg2 button:hover{ background:var(--glass-hi); color:var(--tx-1); }
 .seg2 button.sel{ background:rgba(255,255,255,.15); color:#fff; border-color:var(--line-3); }
 
-/* ───────────── меню в две колонки ─────────────
-   Меню субтитров: слева дорожки, справа оформление, у каждой колонки
-   своя прокрутка. Само меню при этом не прокручивается — иначе рядом
-   с внутренними появлялась бы третья полоса.
-   display переопределяем парой классов: одиночный .menu--split встал бы
-   выше .menu.open и раскрыл меню навсегда. */
+/* The cache row: one bar that shows what is taken and sets the limit.
+   Solid is taken, lighter is the room left under the limit, the knob is
+   the limit, and the bar ends where the disk ends. No colours: when a
+   saved limit no longer fits on the disk, the knob turns into a ring and
+   the line under the bar says why. */
+.cache__head{ display:flex; justify-content:space-between; align-items:baseline; gap:12px; }
+.cache__size{
+  font-size:calc(11.5px + var(--fs)); line-height:1.4; color:var(--tx-2);
+  font-variant-numeric:tabular-nums; white-space:nowrap;
+}
+.cache__bar{
+  position:relative; height:22px; display:flex; align-items:center;
+  cursor:pointer; touch-action:none; outline:none;
+}
+.cache__rail{
+  position:relative; width:100%; height:6px; border-radius:999px;
+  background:rgba(255,255,255,.10); overflow:hidden;
+}
+.cache__room, .cache__used{ position:absolute; top:0; bottom:0; }
+.cache__room{ left:0; background:rgba(255,255,255,.22); }
+.cache__used{ left:0; background:#fff; }
+.cache__knob{
+  position:absolute; top:50%; width:14px; height:14px; margin:-7px 0 0 -7px;
+  box-sizing:border-box; border-radius:50%; background:#fff;
+  box-shadow:0 1px 4px rgba(0,0,0,.5); pointer-events:none;
+}
+.cache__bar:focus-visible .cache__knob{ outline:2px solid var(--line-3); outline-offset:2px; }
+.cache__bar.over .cache__knob{ background:var(--s-2); border:2px solid #fff; }
+.cache__note{
+  font-size:calc(11.5px + var(--fs)); line-height:1.4; color:var(--tx-3);
+  margin-top:-4px; min-height:1.4em;
+}
+.cache__bar.over + .cache__note{ color:var(--tx-1); }
+.cache__clear{
+  padding:8px 6px; border-radius:9px;
+  border:1px solid var(--line); background:transparent;
+  color:var(--tx-2); font-size:calc(12px + var(--fs)); line-height:1.35;
+  transition:background .14s, color .14s, border-color .14s;
+}
+.cache__clear:hover:not(:disabled){ background:var(--glass-hi); color:var(--tx-1); }
+.cache__clear:disabled{ opacity:.4; cursor:default; }
+
+/* ───────────── menus in two columns ─────────────
+   The subtitle menu: tracks on the left, styling on the right, each
+   column scrolling on its own. The menu itself does not scroll, or a
+   third bar would appear next to the inner ones.
+   display is overridden by a pair of classes: a lone .menu--split would
+   outrank .menu.open and leave the menu open forever. */
 .menu--split{
   min-width:min(700px, calc(100vw - 24px));
   max-width:min(880px, calc(100vw - 24px));
@@ -785,29 +1093,105 @@ video::cue{
 }
 .menu--split.open{ display:flex; }
 .menu__col{ flex:1 1 0; min-width:0; min-height:0; overflow-y:auto; }
-.menu__col--side{
-  flex:0 0 43%;
+/* a divider on every column but the first, so the rule does not depend
+   on whether a given menu has two columns or three */
+.menu--split .menu__col + .menu__col{
   margin-left:7px; padding-left:7px;
   border-left:1px solid var(--line);
 }
+/* subtitles: styling needs less room than the list of tracks */
+.menu__col--side{ flex:0 0 43%; }
 
-/* в окне PiP места на две колонки нет — складываем их одна под другой */
+/* The gear menu: keys, settings, languages. Its proportions are its
+   own and the subtitle menu's are different, so the widths live in a
+   separate modifier rather than in the shared .menu--split. Declared
+   below it, otherwise it would not override.
+
+   The height has room to spare so that ten languages fit whole: at the
+   previous 420px the list hit the edge and scrolled by a couple of
+   pixels.
+
+   Anchoring to the gear. An absolutely positioned layer is measured
+   from the padding box of its wrapper, and that wrapper has padding
+   20/36, which pushed the menu 36px to the right of the icon and 30px
+   below it, as if it had come loose. Those paddings are subtracted back
+   and a small one of our own is added: the right edge reaches slightly
+   past the icon, and the gap on top is 12px. */
+.gear.menuwrap{ --gear-pad-x:36px; --gear-pad-y:20px; }
+.menu--gear{
+  top:calc(100% - var(--gear-pad-y) + 12px);
+  right:calc(var(--gear-pad-x) - 10px);
+  min-width:min(892px, calc(100vw - 60px));
+  max-width:min(892px, calc(100vw - 60px));
+  max-height:min(560px, calc(100vh - 120px));
+}
+.menu--gear .menu__col--keys{ flex:0 0 270px; }
+.menu--gear .menu__col--side{ flex:0 0 178px; }
+
+/* the list of keyboard shortcuts */
+.keys__row{
+  display:flex; align-items:baseline; gap:10px;
+  padding:5px 12px; font-size:calc(12.5px + var(--fs)); color:var(--tx-2);
+}
+.keys__caps{ flex:0 0 96px; display:flex; gap:4px; flex-wrap:wrap; }
+.keys__caps kbd{
+  min-width:20px; padding:2px 6px; border-radius:6px;
+  border:1px solid var(--line-2); background:var(--glass-hi);
+  font-family:var(--font); font-size:calc(11px + var(--fs)); line-height:1.5;
+  color:var(--tx-1); text-align:center;
+}
+.keys__what{ flex:1; min-width:0; color:var(--tx-3); line-height:1.45; }
+
+/* There is no room for columns in the PiP window, so they stack and the
+   menu itself scrolls.
+
+   flex:none on every column, not just on the ones after the first. With
+   the flex:1 1 0 inherited from .menu__col the first column was handed a
+   basis of zero and shrank to a height of nothing inside a menu capped at
+   the window height, while overflow:visible let its rows keep painting.
+   The track list then landed straight on top of the styling column: the
+   size buttons sat across the track names and every label was doubled.
+
+   Wider than a plain menu as well: at the 180px floor of .stage.pip-mode
+   .menu a row like "English · SDH" had nowhere to go. */
 .stage.pip-mode .menu--split.open{ flex-direction:column; overflow-y:auto; }
-.stage.pip-mode .menu__col{ overflow:visible; }
-.stage.pip-mode .menu__col--side{
-  flex:none; margin:8px 0 0; padding:8px 0 0;
+/* Ширину в окне PiP не подбираем, а растягиваем меню на всю строку
+   кнопок. Меню раскрывается вправо от своей кнопки, а кнопка субтитров
+   стоит в 58 пикселях от левого края, поэтому любая заданная ширина
+   рано или поздно упирается в правый край и обрезается о .stage: при
+   окне в 320 пикселей меню вылезало на 42.
+
+   Снимаем position с обёртки: тогда слой отсчитывается не от самой
+   кнопки, а от строки .deck__ctrls, то есть от всей ширины окна.
+   По вертикали ничего не меняется, bottom по-прежнему поднимает меню
+   над строкой кнопок. */
+.stage.pip-mode .menuwrap{ position:static; }
+.stage.pip-mode .menu--split{
+  left:8px; right:8px; min-width:0; max-width:none;
+}
+.stage.pip-mode .menu__col{ flex:none; overflow:visible; }
+.stage.pip-mode .menu--split .menu__col + .menu__col{
+  margin:8px 0 0; padding:8px 0 0;
   border-left:0; border-top:1px solid var(--line);
 }
 
-/* какая дорожка перекодируется прямо сейчас */
-.prep__track{ margin-top:4px; font-size:12.5px; color:var(--tx-3); }
+/* which track is being re-encoded right now */
+.prep__track{ margin-top:4px; font-size:calc(12.5px + var(--fs)); color:var(--tx-3); }
 .prep__track:empty{ display:none; }
 .prep__file{ margin-bottom:22px; }
 .stage.pip-mode .prep__track{ display:none; }
 
-/* ───────────── узкое окно ─────────────
-   Медиазапросы держим последними: иначе они не смогут перекрыть
-   правила, объявленные ниже по файлу. */
+/* ───────────── narrow window ─────────────
+   The media queries come last, otherwise they could not override the
+   rules declared further down the file. */
+/* When the floating window is narrowed by hand, not everything fits.
+   Loop and autoplay go first: they are set once per session, while
+   volume, tracks and seeking are used while watching. The rule looks at
+   the PiP window, because a media query measures its own width. */
+@media (max-width:560px){
+  .stage.pip-mode .deck__grp--session{ display:none; }
+}
+
 @media (max-width:1500px){ :root{ --queue-w:504px; } }
 @media (max-width:1100px){ :root{ --queue-w:360px; } }
 @media (max-width:820px){

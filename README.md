@@ -1,120 +1,258 @@
+<a href="https://mythhand.space/"><img src="assets/logo.svg" alt="MythHand"
+height="18"></a>
+
 # PIP Player
 
-Локальный плеер для просмотра сериалов в браузере. Главное — вывод в
-**Picture-in-Picture** со своими контролами внутри PiP-окна.
+A browser player for watching in Picture-in-Picture.
 
-Работает в двух режимах.
+The player is for watching a series in the browser’s Picture-in-Picture: a
+window with no frames and no extra shell, pinned on the screen. Episodes play
+one after another, the chosen dub and subtitles carry over to the next ones,
+and episodes can be switched right from that window.
 
-## Режим 1 — файловый, без сервера
+There is no library and no accounts. This is a local tool: MKV, AVI and the
+rest are handled by a server on your own machine, nothing goes to the network.
 
-Открыть `index.html` в Chrome или Edge:
+Русская версия: [README.ru.md](README.ru.md)
 
-```bash
-open -a "Google Chrome" index.html
-```
+![Main screen: the queue and the player](assets/play.png)
 
-Играет то, что умеет сам браузер: MP4/H.264, WebM, MOV. Ничего ставить не нужно.
+> MKV audio is usually AC-3 or DTS, which the browser will not decode: the
+> picture plays, the sound is silent. Picking another track does not help
+> either, Chrome has no way to switch the tracks of a local file. A local
+> server running your own ffmpeg re-encodes just the track you picked and
+> passes the video through untouched.
 
-## Режим 2 — с мостом на ffmpeg
+## Running it
 
-Нужен для MKV: там звук обычно в AC-3, E-AC-3 или DTS, которые браузер не
-декодирует (картинка идёт, звук молчит), а несколько дорожек он вообще не
-показывает — в Chrome нет API `audioTracks` для локальных файлов.
+Chrome or Edge 116+: extended Picture-in-Picture is built on the Document
+Picture-in-Picture API, which only these have.
+
+Without the server: open `index.html` and drop files or a folder onto the
+window. It plays what the browser can play on its own.
+
+With the server:
 
 ```bash
 node server.mjs
 ```
 
-Затем открыть **http://127.0.0.1:8777**. На macOS можно просто дважды кликнуть
-`start.command` — он поднимет мост и откроет браузер.
+Then open `http://127.0.0.1:8777`. Needs Node 18+ and `ffmpeg` with `ffprobe`
+on `PATH`. macOS, Windows, Linux. `start.command`, `start.bat` and `start.sh`
+start the server and open the page on a double click.
 
-Появятся кнопка «Обзор диска» и список звуковых дорожек с языками.
-
-### Как готовится файл
-
-Мост не раздаёт видео по кусочкам с нужной секунды — он **один раз** прогоняет
-файл целиком в обычный MP4 и кладёт результат в кэш. Видео при этом копируется
-байтами без пережатия, перекодируется только выбранная звуковая дорожка.
-
-Это принципиально: при посекундной раздаче ffmpeg на каждой перемотке заново
-стыковал скопированное видео с заново закодированным звуком, и они разъезжались.
-Один проход по исходной шкале времени такой стыковки не требует.
-
-Готовый файл раздаётся с поддержкой Range, поэтому браузер перематывает его
-сам, без участия плеера. Индекс переносится в начало файла (`+faststart`), так
-что перемотка мгновенная.
-
-Первое открытие требует ожидания — показываются шаги подготовки. Следующая
-серия готовится фоном, пока смотрите текущую.
-
-Кэш лежит во временной папке системы, путь печатается при запуске. Лимит по
-умолчанию 24 ГБ, самые старые файлы вытесняются:
-
-```bash
-PIP_CACHE_GB=40 node server.mjs
-```
-
-## Проверка целостности
-
-```bash
-node check.mjs
-```
-
-Ловит рассогласования между разметкой, стилями и кодом. Главное, что она
-проверяет, — всплывающие слои (меню, подсказки) не должны обрезаться предком
-с `overflow:hidden`.
-
-## Два режима PiP
-
-| режим | когда | что даёт |
+| | without the server | with the server |
 |---|---|---|
-| **Document PiP** | Chrome / Edge 116+ | в PiP-окно переезжает весь плеер: свой таймлайн, play/pause, prev/next, клик по картинке = пауза, стрелки ←/→ перематывают |
-| классический PiP | остальные браузеры | родные контролы ОС + prev/next через Media Session API |
+| MP4, MOV, WebM | plays | plays, the file is served as it is |
+| MKV | picture; sound if the track is AAC, MP3, Opus, Vorbis or FLAC | video copied, sound re-encoded to AAC |
+| HEVC | depends on the computer | re-encoded to H.264 |
+| TS, FLV, MPG, WMV, AVI | does not open | remuxed or re-encoded |
 
-Режим определяется автоматически.
+Only with the server: audio track choice, subtitles, the disk browser, the
+queue coming back after a reload, the cache.
 
-## Горячие клавиши
+## Picture-in-Picture
 
-Работают и в основном окне, и внутри Document PiP. Раскладка не важна.
+- Browser mode: a window with no address bar, system controls. Previous and
+  next work through the Media Session API.
+- Extended mode: the whole player moves into the floating window with the seek
+  bar, volume, speed, audio track and subtitle pickers, repeat and
+  auto-advance. The queue, the settings and fullscreen stay in the main
+  window.
+  - Hotkeys work inside the floating window too.
+
+> Removing the site address bar from the top of the window in extended mode
+> did not work out: Chrome draws it itself. That is why browser mode is the
+> default.
+
+![Choosing the Picture-in-Picture mode](assets/pip-select.png)
+
+## Sound and subtitles
+
+- The track list shows language, studio name, codec, channel layout, bitrate
+  and sample rate.
+- The audio track choice survives switching files. It looks for the same set
+  of tracks first, then a matching language and studio, then language alone.
+- Text subtitles (SRT, ASS, SSA, WebVTT, mov_text) are converted to WebVTT and
+  attached to the video. The browser understands only WebVTT and does not read
+  subtitles inside an MKV at all, so the server extracts them.
+- Image subtitles (PGS from Blu-ray, VOBSUB from DVD) are listed but cannot be
+  picked. Each line in them is stored as a picture, it does not turn into
+  text, and burning it into the frame means re-encoding the whole video.
+- The subtitle choice survives the same way. Size, backing and height are
+  adjustable.
+- Track choice and subtitles work only with the local server.
+
+![Choosing the audio track](assets/audio.png)
+
+![Choosing subtitles](assets/sub.png)
+
+## The local ffmpeg server
+
+- One ffmpeg pass per file and track: the video is stream-copied, only the
+  chosen audio track is re-encoded to AAC.
+- The file is prepared whole in advance, not in pieces on the fly. Encoding in
+  pieces joined the sound to the video anew on every seek, and the two drifted
+  apart.
+- The result is served with HTTP Range. Seeking is done by the browser, as
+  with any ordinary file.
+- The next file is prepared in the background, keeping the chosen audio track.
+- The video is re-encoded only when the browser cannot decode its codec, that
+  is when it is not H.264, VP8, VP9 or AV1. Encoding on the CPU takes every
+  core for minutes, so a hardware encoder is used: videotoolbox on macOS,
+  NVENC, Quick Sync or AMF on Windows, NVENC or Quick Sync on Linux. On
+  failure the pass is repeated on libx264.
+- Files the browser decodes on its own are served untouched. Prepared files
+  sit in a cache and are evicted by least recent use. Files read in the last
+  10 minutes are not evicted: the episode playing and the next one just
+  prepared. They can take the cache over the limit for a while. An episode
+  paused for longer than 10 minutes can be evicted if other files were
+  prepared meanwhile.
+- The browser does not give the path of a dropped file, so the server looks
+  for it on disk by name and size, and takes the rest from the same folder.
+  Folders where files were found before are checked first.
+
+![Preparing a file with ffmpeg](assets/re-encoding.png)
+
+## Playback and queue
+
+- Adding: files, a folder, drag-and-drop, the disk browser. A picked or
+  dropped folder is read with its subfolders; the disk browser adds the files
+  of the open folder only.
+- The disk browser has shortcuts on the left: Home, Downloads, Movies (Videos
+  on Windows), Desktop and mounted drives. A folder passed to the server as an
+  argument comes first.
+- Sort by name, reverse, shuffle, change the order of files by hand.
+- Two list views: rows with duration, size and track count, or a grid of
+  frames taken from the files.
+- Auto-advance to the next file. Repeat of the queue or of one file. A summary
+  card at the end.
+- Speed from 0.5× to 2×. Seeking by mouse and keyboard, a time hint above the
+  bar, a buffered marker.
+- The watch position is remembered for each file. Within the first 30 seconds
+  there is nothing to return to, and the last minute counts as a finished
+  episode, so there is no return there.
+- The volume is remembered.
+- With the local server, a page reload brings back the queue and marks the
+  file you stopped on. It starts playing when you press play, otherwise just
+  opening the tab would start ffmpeg. Without the server the queue does not
+  come back: a dropped file has no path on disk to open it by again.
+
+## Interface
+
+- Ten languages, picked from the browser.
+- Two typefaces.
+- Hotkeys are bound to physical key codes and work in any keyboard layout.
+- The control panel hides itself, the favicon shows the state.
+- General player settings under the gear at the top right: the file panel
+  overlays the video or shrinks it, changing the order of files by hand,
+  hiding the controls on auto-advance, typeface, language. Also there: the
+  hotkey list and the server cache.
+- The cache is one bar: the fill shows the space taken, the knob sets the
+  limit, 24 GB by default. The bar ends where the room for the cache on the
+  disk ends: the space it takes plus the free space. The limit does not go
+  below 8 GB. If a saved limit no longer fits on the disk, the knob turns into
+  a ring and a warning appears under the bar. The server learns the disk size
+  on Node 18.15 and newer; on an older one the scale is built from the limit
+  and the space taken. Clearing removes everything except the file playing,
+  otherwise the next seek would hit a missing file.
+
+![General player settings](assets/setting.png)
+
+## Hotkeys
 
 | | |
 |---|---|
-| `Space` / `K` | пауза |
-| `←` `→` | ∓5 секунд |
-| `Shift + ←` `→` | ∓1 секунда |
-| `J` `L` | ∓10 секунд |
-| `↑` `↓` | громкость |
-| `0`–`9` | переход на 0…90 % |
-| `Home` / `End` | начало / конец |
-| `N` `B` | следующий / предыдущий файл |
-| `P` | picture-in-picture |
-| `F` | полный экран |
-| `Q` | показать/скрыть очередь |
-| `M` | без звука |
-| `Esc` | закрыть PiP |
+| `Space` `K` | play / pause |
+| `←` `→` | ∓5 seconds |
+| `Shift` + `←` `→` | ∓1 second |
+| `J` `L` | ∓10 seconds |
+| `↑` `↓` | volume |
+| `0` … `9` | jump to 0 … 90 % |
+| `Home` `End` | start / end |
+| `B` `N` | previous / next file |
+| `M` | mute |
+| `P` | Picture-in-Picture |
+| `F` | fullscreen |
+| `Q` | show / hide the queue |
+| `Esc` | close the menu, the PiP window or the queue |
 
-Таймлайн отдельно фокусируется по `Tab`: тогда `←/→` двигают позицию,
-`PageUp`/`PageDown` — минутами.
+Seek bar focused with `Tab`: `←` `→` by 5 seconds, `PageUp` `PageDown` by a
+minute. Click on the picture: pause. Double click: fullscreen.
 
-## Очередь
+## Server options
 
-* Кнопки «Файлы» и «Папка», либо перетаскивание файлов или целой папки в окно
-  (вложенные папки обходятся рекурсивно). В серверном режиме — ещё «Обзор диска».
-* Порядок внутри пачки — натуральная сортировка, так что `E2` идёт перед `E10`.
-* Переупорядочивание — перетаскиванием строки; плюс сортировка по имени,
-  обратный порядок и перемешивание.
-* Кнопка списка живёт в нижней панели управления, рядом с PiP и полным экраном.
+```bash
+PORT=9000 node server.mjs               # port, 8777 by default
+PIP_CACHE=/path/to/dir node server.mjs  # cache folder, in the system temp folder by default
+PIP_CACHE_GB=40 node server.mjs         # starting cache limit in GB, 24 by default
+PIP_ENCODER=software node server.mjs    # no hardware encoding
+node server.mjs /Volumes/Media          # one more folder the server may read
+```
 
-После последнего файла воспроизведение останавливается. Кнопка повтора в панели
-(по умолчанию выключена) меняет это на зацикливание очереди.
+A limit set in the player is kept in the cache folder and after a restart wins
+over `PIP_CACHE_GB`. The cache path is printed on startup.
 
-## Файлы
+## What the server reads
+
+The server lists folders and hands out files, that is its job. So access to it
+is limited:
+
+- Listens on `127.0.0.1` only, other machines cannot reach it.
+- Refuses requests with a foreign `Host` and requests made by other websites.
+  Without this, any page open in the same browser could read your folders and
+  files through the running server.
+- Reads the home folder, `/Volumes`, `/media`, `/mnt`, `/run/media`, the
+  drives on Windows and the folder passed as an argument. Other paths are
+  refused.
+- Writes only to its cache.
+
+## Project files
 
 ```
-index.html     разметка
-styles.css     оформление, без фреймворков
-app.js         плеер, очередь, PiP, дорожки, хоткеи
-server.mjs     мост на ffmpeg: ffprobe, обзор диска, подготовка, кэш
-check.mjs      проверка целостности перед запуском
-start.command  запуск в один клик (macOS)
+index.html      markup
+styles.css      styles
+app.js          the player
+i18n.js         interface texts in ten languages
+server.mjs      the local ffmpeg server
+check.mjs       check of markup, styles and translations
+test/           tests
+assets/         README images and the logo
+start.command   start, macOS
+start.bat       start, Windows
+start.sh        start, Linux
+FixelDisplay/   typeface and its licence
+Inter/          typeface and its licence
 ```
+
+## Checks
+
+```bash
+node check.mjs
+node --test
+```
+
+`check.mjs` checks the markup, styles and dictionaries without running them.
+`node --test` runs 106 tests: the server over HTTP, the interface in headless
+Chrome. The test media is generated by ffmpeg in a temporary folder, none of
+your files is read. Needs Node 20+, ffmpeg and Chrome; without Chrome the
+interface tests are skipped.
+
+![Output of node --test](assets/tests.png)
+
+## Typefaces and icons
+
+| | |
+|---|---|
+| [Fixel Display](https://fixel.macpaw.com/) | SIL Open Font License 1.1, © 2023 MacPaw Inc. (Authors: Alfabravo + MacPaw) |
+| [Inter](https://rsms.me/inter/) | SIL Open Font License 1.1, © 2020 The Inter Project Authors |
+| [Phosphor Icons](https://phosphoricons.com/) | MIT |
+
+## Author
+
+[mythhand.space](https://mythhand.space/)
+
+## License
+
+MIT, see [LICENSE](LICENSE). The typefaces have their own licences, listed
+above.
