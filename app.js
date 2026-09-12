@@ -274,6 +274,8 @@ const SETTINGS = [
     opts: [['overlay', 'set.queueMode.overlay'], ['docked', 'set.queueMode.docked']] },
   { key: 'drag', def: 'on', label: 'set.drag',
     opts: [['on', 'common.on'], ['off', 'common.off']] },
+  { key: 'follow', def: 'on', label: 'set.follow',
+    opts: [['on', 'common.on'], ['off', 'common.off']] },
   { key: 'hideUi', def: 'off', label: 'set.hideUi',
     opts: [['on', 'common.on'], ['off', 'common.off']] },
   { key: 'font', def: 'fixel', label: 'set.font',
@@ -966,7 +968,9 @@ function fadeIn() {
 let booted = false;
 let playToken = 0;
 
-async function playItem(it, autoplay = true) {
+/* glide is false for a file picked in the queue: its row is already
+   under the pointer, and scrolling would move it away from there */
+async function playItem(it, autoplay = true, glide = true) {
   if (!it) return;
   state.current = it;
   state.seekPreview = null;
@@ -978,7 +982,8 @@ async function playItem(it, autoplay = true) {
   paintTitle();
   ghostName.textContent = it.name;
   if (state.pipWin) state.pipWin.document.title = it.name;
-  render(); syncAudioButton(); syncStatus(); mediaMeta(it);
+  paintActive(); syncAudioButton(); syncStatus(); mediaMeta(it);
+  if (glide && state.set.follow === 'on') revealCurrent();
   deckShow(false);
 
   const token = ++playToken;
@@ -1852,15 +1857,80 @@ function render() {
   watchThumbs();
 }
 
+/* A new current file changes the state of two cards and nothing else.
+   render() builds the list anew, and a card built already active has
+   nothing to pass from, so the change of state never showed. Here the
+   cards stay and only their classes change, which the transitions in
+   styles.css play out. A list that no longer matches the queue is built
+   anew as before. */
+function paintActive() {
+  const kids = [...queueList.children];
+  if (kids.length !== state.list.length || kids.some((li, i) => li.dataset.id !== String(state.list[i].id))) return render();
+  saveSession();
+  btnLocate.hidden = !cur();
+  for (const li of kids) {
+    const it = byId(li.dataset.id);
+    li.classList.toggle('active', it === cur());
+    li.classList.toggle('playing', it === cur() && !video.paused);
+    li.classList.toggle('bad', !!it.err);
+  }
+}
+
+/* The curve of the panel sliding out, read from --slide in styles.css so
+   the scroll to a file moves the same way and there is one place to
+   tune it. scrollTo with smooth behaviour follows the browser's own
+   curve and cannot take another. */
+function cubicBezier(x1, y1, x2, y2) {
+  const cx = 3 * x1, bx = 3 * (x2 - x1) - cx, ax = 1 - cx - bx;
+  const cy = 3 * y1, by = 3 * (y2 - y1) - cy, ay = 1 - cy - by;
+  const X = t => ((ax * t + bx) * t + cx) * t;
+  const Y = t => ((ay * t + by) * t + cy) * t;
+  return x => {
+    let lo = 0, hi = 1, t = x;
+    for (let i = 0; i < 24; i++) {
+      const d = X(t) - x;
+      if (Math.abs(d) < 1e-5) break;
+      if (d > 0) hi = t; else lo = t;
+      t = (lo + hi) / 2;
+    }
+    return Y(t);
+  };
+}
+const SLIDE = (() => {
+  const v = getComputedStyle(document.documentElement).getPropertyValue('--slide');
+  const m = /cubic-bezier\(([^)]+)\)/.exec(v);
+  return { ms: parseFloat(v) || 620, ease: cubicBezier(...(m ? m[1] : '.32,.72,0,1').split(',').map(Number)) };
+})();
+
+let glideRaf = 0;
+function glideTo(top) {
+  cancelAnimationFrame(glideRaf);
+  const from = queueList.scrollTop;
+  const to = Math.max(0, Math.min(queueList.scrollHeight - queueList.clientHeight, top));
+  if (Math.abs(to - from) < 1) return;
+  const t0 = performance.now();
+  const step = now => {
+    const k = Math.min(1, (now - t0) / SLIDE.ms);
+    queueList.scrollTop = from + (to - from) * SLIDE.ease(k);
+    if (k < 1) glideRaf = requestAnimationFrame(step);
+  };
+  glideRaf = requestAnimationFrame(step);
+}
+/* the wheel or a hand on the list takes over from a glide in progress */
+queueList.addEventListener('wheel', () => cancelAnimationFrame(glideRaf), { passive: true });
+queueList.addEventListener('pointerdown', () => cancelAnimationFrame(glideRaf));
+
 /* In a long season the file playing is easy to lose while scrolling.
    This brings it back into view, not to the very top but at 23 % of the
-   list's height, so the files before it are still seen. */
-btnLocate.onclick = () => {
+   list's height, so the files before it are still seen. The same glide
+   follows a file that starts, when the setting asks for it. */
+function revealCurrent() {
   const li = queueList.querySelector('.item.active, .tile.active');
   if (!li) return;
   const box = queueList.getBoundingClientRect(), r = li.getBoundingClientRect();
-  queueList.scrollTo({ top: queueList.scrollTop + r.top - box.top - box.height * 0.23, behavior: 'smooth' });
-};
+  glideTo(queueList.scrollTop + r.top - box.top - box.height * 0.23);
+}
+btnLocate.onclick = revealCurrent;
 
 /* ── the project description in an empty queue ────────────────
    The order here carries meaning and is not accidental. At the top,
@@ -2137,7 +2207,7 @@ queueList.addEventListener('click', e => {
   const it = byId(li.dataset.id);
   if (!it) return;
   if (e.target.closest('.item__x')) return removeItem(it);
-  playItem(it);
+  playItem(it, true, false);
 });
 
 function removeItem(it) {

@@ -154,6 +154,7 @@ en: {
   'set.queueMode.overlay': 'Overlays the video',
   'set.queueMode.docked': 'Shrinks the video',
   'set.drag': 'Reorder files',
+  'set.follow': 'Scroll the queue to the current file',
   'set.hideUi': 'Hide the controls on auto-advance',
 
   'queue.hide': 'Hide · Q',
@@ -405,6 +406,7 @@ ru: {
   'set.queueMode.overlay': 'Наезжает на видео',
   'set.queueMode.docked': 'Сужает видео',
   'set.drag': 'Изменять порядок файлов',
+  'set.follow': 'Прокручивать очередь к текущему файлу',
   'set.hideUi': 'Скрывать панель управления при автопереходе',
 
   'queue.hide': 'Скрыть · Q',
@@ -656,6 +658,7 @@ ru: {
   'set.queueMode.overlay': 'Liegt über dem Video',
   'set.queueMode.docked': 'Verkleinert das Video',
   'set.drag': 'Reihenfolge ändern',
+  'set.follow': 'Scroll the queue to the current file',
   'set.hideUi': 'Bedienleiste beim automatischen Wechsel ausblenden',
 
   'queue.hide': 'Ausblenden · Q',
@@ -907,6 +910,7 @@ ru: {
   'set.queueMode.overlay': 'Recouvre la vidéo',
   'set.queueMode.docked': 'Rétrécit la vidéo',
   'set.drag': 'Réordonner les fichiers',
+  'set.follow': 'Scroll the queue to the current file',
   'set.hideUi': 'Masquer les contrôles lors de l’enchaînement',
 
   'queue.hide': 'Masquer · Q',
@@ -1158,6 +1162,7 @@ ru: {
   'set.queueMode.overlay': 'Se superpone al vídeo',
   'set.queueMode.docked': 'Estrecha el vídeo',
   'set.drag': 'Reordenar los archivos',
+  'set.follow': 'Scroll the queue to the current file',
   'set.hideUi': 'Ocultar los controles al avanzar automáticamente',
 
   'queue.hide': 'Ocultar · Q',
@@ -1409,6 +1414,7 @@ ru: {
   'set.queueMode.overlay': 'Si sovrappone al video',
   'set.queueMode.docked': 'Restringe il video',
   'set.drag': 'Riordinare i file',
+  'set.follow': 'Scroll the queue to the current file',
   'set.hideUi': 'Nascondere i controlli durante l’avanzamento automatico',
 
   'queue.hide': 'Nascondi · Q',
@@ -1660,6 +1666,7 @@ ru: {
   'set.queueMode.overlay': 'Sobrepõe o vídeo',
   'set.queueMode.docked': 'Estreita o vídeo',
   'set.drag': 'Reordenar os arquivos',
+  'set.follow': 'Scroll the queue to the current file',
   'set.hideUi': 'Ocultar os controles no avanço automático',
 
   'queue.hide': 'Ocultar · Q',
@@ -1911,6 +1918,7 @@ ru: {
   'set.queueMode.overlay': 'Nachodzi na wideo',
   'set.queueMode.docked': 'Zwęża wideo',
   'set.drag': 'Zmiana kolejności plików',
+  'set.follow': 'Scroll the queue to the current file',
   'set.hideUi': 'Ukrywaj panel przy automatycznym przejściu',
 
   'queue.hide': 'Ukryj · Q',
@@ -2162,6 +2170,7 @@ ru: {
   'set.queueMode.overlay': 'Videonun üzerine biner',
   'set.queueMode.docked': 'Videoyu daraltır',
   'set.drag': 'Dosya sırasını değiştirme',
+  'set.follow': 'Scroll the queue to the current file',
   'set.hideUi': 'Otomatik geçişte denetimleri gizle',
 
   'queue.hide': 'Gizle · Q',
@@ -2413,6 +2422,7 @@ ru: {
   'set.queueMode.overlay': '覆盖在视频上',
   'set.queueMode.docked': '压缩视频宽度',
   'set.drag': '调整文件顺序',
+  'set.follow': 'Scroll the queue to the current file',
   'set.hideUi': '自动切换时隐藏控制栏',
 
   'queue.hide': '隐藏 · Q',
