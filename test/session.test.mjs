@@ -167,9 +167,9 @@ const SCRIPT = `
   await window.__settled();
 
   /* ── the same menu inside the floating window ──
-     The stage is what moves into the PiP window, and pip-mode is the
-     class it carries there, so adding it here puts the layout in
-     exactly the state the floating window renders. */
+     The floating window holds a copy of the stage with pip-mode on it,
+     so adding the class to the stage here lays the deck and the menu
+     out as the window does. */
   window.__step('pip');
   out.pip = {};
   for (const width of [600, 380, 320]) {

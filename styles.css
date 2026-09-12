@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════
-   PIP Player — monochrome player shell
+   PIP Player, the monochrome player shell
    Reference point: Opera Neon. Glass, circles, air, grey only.
    ═══════════════════════════════════════════════════════════ */
 
@@ -622,8 +622,12 @@ svg.ph{ fill:currentColor; stroke:none; }
 /* ───────────── the project description in an empty queue ─────────────
    While there are no files, the left panel is the most visible place in
    the window and it stands empty. At the top, what is needed right now;
-   below the divider, what the player is. */
-.queue__about{ padding:22px 24px 34px; color:var(--tx-3); }
+   below the divider, what the player is.
+   The prose and the feature points take a grey between --tx-2 and
+   --tx-3: at --tx-3 they sank into the panel, at --tx-2 they would match
+   the group headings. The drop hint, the note and the sub-points set
+   --tx-3 of their own and stay one step quieter. */
+.queue__about{ padding:22px 24px 34px; color:#a0a1a8; }
 /* the invitation to drop files comes first and quietly: it is a hint,
    not part of the description */
 .queue__about .queue__drop{
@@ -727,7 +731,10 @@ svg.ph{ fill:currentColor; stroke:none; }
 .workspace.queue-open .queue{ transform:none; }
 /* While the queue is empty the view and order controls have nothing to
    act on; the header then names what the panel shows. */
-.queue__title{ display:none; font-size:calc(14px + var(--fs)); font-weight:560; color:var(--tx-1); }
+/* 8px on top of the header's 16: the title starts on the line of the
+   description below it, whose padding is 24px. Centred by its box it
+   read as sitting high, so it goes 1px lower. */
+.queue__title{ display:none; margin-left:8px; translate:0 1px; font-size:calc(14px + var(--fs)); font-weight:560; color:var(--tx-1); }
 .queue--empty .queue__title{ display:block; }
 .queue--empty .toolgrp{ display:none; }
 .queue__tools{
@@ -735,6 +742,9 @@ svg.ph{ fill:currentColor; stroke:none; }
      label sticks to the previous group's buttons */
   display:flex; gap:20px; align-items:center;
   padding:12px 12px 12px 16px; border-bottom:1px solid var(--line);
+  /* as tall as the row of 32px buttons, whether they are there or not:
+     emptied, the header shrank to its title and the title rode high */
+  min-height:57px;
 }
 
 /* A labelled group: without it two clusters of icons stand side by side
@@ -919,8 +929,8 @@ svg.ph{ fill:currentColor; stroke:none; }
   opacity:0; transition:opacity .26s ease; }
 .item.active .item__eq{ opacity:1; }
 /* One indicator for the rows and the tiles: while the file plays, the
-   bars run as a wave, the one in the middle of the placeholder while the
-   extended PiP is open (eq, 1.1 s, 0.14 s apart), three bars instead of
+   bars run as a wave, the one in the middle of the placeholder while a
+   PiP window is open (eq, 1.1 s, 0.14 s apart), three bars instead of
    five. On pause they settle into dots. */
 .item__eq i, .tile__eq i{
   width:2.5px; height:13px; border-radius:99px; background:var(--tx-1);
@@ -1042,7 +1052,7 @@ svg.ph{ fill:currentColor; stroke:none; }
 .workspace:fullscreen .stage{ background:#000; }
 
 /* ═══════════════════════════════════════════════════════════
-   The PiP window: .stage moves here whole
+   The extended PiP window: a copy of the stage with pip-mode on it
    ═══════════════════════════════════════════════════════════ */
 body.pip-body{ background:#000; overflow:hidden; height:100vh; }
 body.pip-body::before{ display:none; }
@@ -1060,7 +1070,7 @@ body.pip-body::before{ display:none; }
 .stage.pip-mode .rb--main{ width:38px; height:38px; }
 .stage.pip-mode .rb--main svg{ width:19px; height:19px; }
 .stage.pip-mode .rb--wide{ padding:0 10px; font-size:calc(12px + var(--fs)); }
-/* In the extended mode the whole player moves into the floating window,
+/* In the extended mode the floating window holds a copy of the player,
    and the point of that mode is having its own controls. Volume matters
    there as much as in the main window, so what shrinks is the length of
    the slider, not the control. */
@@ -1298,7 +1308,7 @@ video::cue{
 /* In the PiP window the width is not chosen: the menu is stretched
    across the whole row of buttons. It opens to the right of its button,
    and the subtitle button stands 58px from the left edge, so any set
-   width sooner or later hits the right edge and is cut off by .stage:
+   width sooner or later hits the right edge and is cut off by the window:
    at a 320px window the menu ran 42px past it.
 
    So the wrapper loses its position: the layer is then measured not

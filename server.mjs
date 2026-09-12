@@ -284,7 +284,7 @@ async function evict() {
 }
 
 /* What sits in the cache and how much it takes. Counts everything we
-   put there: finished mp4 files, frames for the tiles, extracted
+   put there: finished mp4 files, frames for the queue, extracted
    subtitles, and half-written .part files from interrupted passes. */
 const CACHE_EXT = ['.mp4', '.jpg', '.vtt', '.part'];
 
@@ -587,8 +587,8 @@ async function findByName(name, size, dirs = []) {
    One frame per file, at roughly 12 % of the duration: the opening
    titles are over and the middle of the episode is still far off. It
    goes into the same cache. No more than two ffmpeg processes at once:
-   tiles ask for thumbnails in batches, and without a limit an open
-   grid floors the CPU. */
+   the queue asks for thumbnails in batches, and without a limit a
+   long list floors the CPU. */
 const thumbJobs = new Map();
 let thumbBusy = 0;
 

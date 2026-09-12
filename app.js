@@ -160,8 +160,10 @@ const MENUS = [audioMenu, pipMenu, rateMenu, subsMenu, gearMenu];
    gives way are in styles.css, next to the classes set below. */
 
 /* The deck: speed, loop and autoplay fold into a gear, then the studio
-   name loses letters, then goes. Each side gets half of what the centre
-   leaves, and a side that needs more takes the next step. */
+   name loses letters, then goes and leaves the icon, then the buttons
+   take their smaller size, and last the centre leaves the exact middle.
+   Each side gets half of what the centre leaves, and a side that needs
+   more takes the next step. */
 const deckRow = deck.querySelector('.deck__ctrls'), deckCenter = deck.querySelector('.deck__center');
 const deckLeft = deck.querySelector('.deck__side--left'), deckRight = deck.querySelector('.deck__side--right');
 const textMeter = document.createElement('canvas').getContext('2d');
@@ -176,12 +178,16 @@ function fourLetters() {
 function fitDeck() {
   if (!deckRow.clientWidth) return;               // hidden, nothing to measure
   deck.classList.remove('deck--packed', 'deck--compact', 'deck--offcentre');
+  /* pip-mode is the class of the copy in the extended PiP window, which
+     is sized by its own rules in styles.css and not fitted at all. The
+     tab's stage carries it only in the tests, to lay the deck out as the
+     window does. */
+  if (stage.classList.contains('pip-mode')) { fitLabel(Infinity); return; }
   const gap = parseFloat(getComputedStyle(deckRow).columnGap) || 0;
   /* measured afresh each time: the compact step changes the padding
      and the size of the centre */
   const room = () => (deckRow.clientWidth - deckCenter.offsetWidth) / 2 - gap;
   if (deckRight.scrollWidth > room()) deck.classList.add('deck--packed');
-  if (stage.classList.contains('pip-mode')) { fitLabel(Infinity); return; }   // the PiP window has rules of its own
   if (!fitLabel(room()) || deckRight.scrollWidth > room()) {
     deck.classList.add('deck--compact');
     /* the last step: the centre leaves the exact middle, and the sides
@@ -1110,7 +1116,8 @@ function poke() {
   }, 2600);
 }
 
-/* shown on the player's own initiative: obeys autoplay */
+/* shown on the player's own initiative: during an automatic move to the
+   next file it obeys the setting that hides the controls */
 function deckShow(persist) {
   if (autoSwitch && state.set.hideUi === 'on') return;
   if (persist) { stage.classList.remove('idle', 'cursor-hidden'); clearTimeout(hideT); }
@@ -1478,9 +1485,9 @@ const CUE_UI = [
 
 function applyCueStyle() {
   const c = state.cue, b = CUE_BG[c.bg] || CUE_BG.shadow;
-  /* the variables go on the video element itself: it moves into the PiP
-     window together with the stage, and document level variables would
-     not travel with it */
+  /* the variables go on the video element itself: it is what moves into
+     the extended PiP window, and variables set on the document would
+     stay behind in the tab */
   video.style.setProperty('--cue-size', CUE_SIZE[c.size] || '100%');
   video.style.setProperty('--cue-bg', b.bg);
   video.style.setProperty('--cue-shadow', b.sh);
@@ -1542,8 +1549,8 @@ function applySettings() {
   queueList.classList.toggle('no-drag', state.set.drag === 'off');
   for (const li of queueList.children) li.draggable = state.set.drag === 'on';
   /* the font lives in a variable on :root, and the same one has to be
-     set in the PiP window: the stage moves there, but the window has a
-     root element of its own */
+     set in the extended PiP window: the copy of the player there takes
+     it from the window's own root element */
   document.documentElement.dataset.font = state.set.font;
   if (state.pipWin) state.pipWin.document.documentElement.dataset.font = state.set.font;
 }
@@ -1865,11 +1872,11 @@ btnLocate.onclick = () => {
    for, then what it cannot work without, and only at the end the
    trimmings. */
 const FEAT_GROUPS = [
-  ['pip', 2],       // why the project exists
+  ['pip', 3],       // why the project exists
   ['audio', 5],     // without a track choice a release cannot be watched
   ['bridge', 7],    // what makes any of it play at all
-  ['play', 7],      // the mechanics of watching a series
-  ['ui', 5],        // the trimmings
+  ['play', 8],      // the mechanics of watching a series
+  ['ui', 6],        // the trimmings
 ];
 
 function aboutBlock() {
@@ -2347,7 +2354,7 @@ async function togglePip() {
   if (document.pictureInPictureElement) { try { await document.exitPictureInPicture(); } catch (_) {} return; }
   if (!cur()) return toast(t('pip.pickFirst'));
 
-  /* The compact mode is a window with no address bar but with the
+  /* The browser mode is a window with no address bar but with the
      browser's own controls. The bar cannot be hidden in the extended
      mode: it is Chrome's own interface. */
   if (state.pipMode === 'native') return nativePip();
@@ -2412,7 +2419,10 @@ btnPipMode.onclick = e => {
    a button pressed in the window presses its twin in the tab, so every
    handler stays where it is. Only what belongs to one window is not
    mirrored: the stage's own classes (idle, the cursor), the deck's
-   fitting to its width, and which menu is open and where it stands. */
+   fitting to the tab's width, and which menu is open and where it
+   stands. The copy starts without them too, whatever the tab had at
+   that moment, and its deck is never fitted: the pip-mode rules size it
+   for the window. */
 let pipView = null, pipMirror = null, videoSlot = null, pipHideT = 0;
 
 const pathIn = (root, node) => {
@@ -2427,7 +2437,7 @@ const nodeAt = (root, p) => p.reduce((n, i) => n && n.childNodes[i], root) || nu
 
 /* the classes each window keeps for itself; the rest follow the tab */
 const OWN_CLASSES = new Set(['idle', 'cursor-hidden', 'is-pip', 'pip-mode', 'open',
-  'deck--packed', 'deck--compact', 'deck--offcentre']);
+  'deck--packed', 'deck--compact', 'deck--offcentre', 'rb--icon']);
 function mirrorOne(r) {
   const path = pathIn(stage, r.target);
   if (!path) return;                                  // already out of the tree
@@ -2442,8 +2452,9 @@ function mirrorOne(r) {
     twin.classList.add(...own);
     return;
   }
-  /* where an open menu stands is worked out in its own window */
-  if (r.type === 'attributes' && r.attributeName === 'style' && el.classList.contains('menu')) return;
+  /* where an open menu stands is worked out in its own window, and the
+     studio name is cut to the tab's room, not the window's */
+  if (r.type === 'attributes' && r.attributeName === 'style' && (el.classList.contains('menu') || el === audioLabel)) return;
   if (el === stage && r.type === 'attributes') return;
   if (r.type === 'attributes') {
     const v = el.getAttribute(r.attributeName);
@@ -2495,9 +2506,9 @@ function pipClick(e) {
 
 async function openDocPip() {
   const vw = video.videoWidth || 16, vh = video.videoHeight || 9;
-  /* 600 rather than 520: the extended deck now carries volume as well as
-     loop and autoplay, and at 520 the row sat flush and broke into two
-     lines on a long studio name */
+  /* 600 wide, raised from 520 when the deck in the window still held
+     loop and autoplay as well and the row broke in two. Those have left
+     the window since; the width stayed. */
   const w = 600, h = Math.max(200, Math.round(w * vh / vw));
   const win = await window.documentPictureInPicture.requestWindow({ width: w, height: h });
   state.pipWin = win;
@@ -2526,11 +2537,11 @@ async function openDocPip() {
   videoSlot = document.createElement('span');
   video.replaceWith(videoSlot);
   pipView = stage.cloneNode(true);
-  pipView.classList.remove('idle', 'cursor-hidden', 'is-pip');
+  for (const el of [pipView, ...pipView.querySelectorAll('[class]')]) el.classList.remove(...OWN_CLASSES);
+  pipView.querySelector('#audioLabel').style.maxWidth = '';
   pipView.classList.add('pip-mode');
   pipView.removeAttribute('tabindex');
   nodeAt(pipView, pathIn(stage, videoSlot)).replaceWith(video);
-  closePipMenus();
   win.document.body.append(pipView);
   pipMirror = new MutationObserver(recs => recs.forEach(mirrorOne));
   pipMirror.observe(stage, { subtree: true, attributes: true, childList: true, characterData: true });

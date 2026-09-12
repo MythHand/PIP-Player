@@ -33,8 +33,8 @@ const SCRIPT = `
     /* the attribute alone proves nothing: a class with its own display
        overrides it, so what is checked is whether it is drawn */
     footerDiskDrawn: getComputedStyle($('#btnDisk')).display !== 'none',
-    /* by id: .empty is also on the stage, and the end of queue card
-       lives inside it with a filled button of its own */
+    /* by id: the end of queue card on the stage has a filled button of
+       its own, and only the start screen's one is asked about */
     primary: [...document.querySelectorAll('#empty .btn--solid')].map(b => b.id),
     docTitle: document.title,
     /* with no files the header names the panel instead of offering

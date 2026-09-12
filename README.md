@@ -56,13 +56,16 @@ queue coming back after a reload, the cache.
 
 - Browser mode: a window with no address bar, browser controls. Previous and
   next work through the Media Session API.
-- Extended mode: the player moves into the floating window with the seek bar,
-  volume, audio track and subtitle pickers. Speed, repeat and auto-advance are
-  set before the window opens. The queue, the settings and fullscreen stay in
-  the main window.
+- Extended mode: the video goes into the floating window with the seek bar,
+  episode switching, volume, audio track and subtitle pickers. The main window
+  stays fully working: speed, repeat, auto-advance, the queue, the settings
+  and fullscreen remain there. A change in one window shows in the other at
+  once.
   - Hotkeys work inside the floating window too.
-  - The recommended minimum width of the window is 300 pixels: narrower than
-    that, the buttons run into each other.
+- In both modes the main window shows a placeholder with a “Bring it back”
+  button where the video was. If the queue was closed, it opens in the main
+  window while Picture-in-Picture is on, so episodes can be switched from
+  there, and closes again once the floating window is closed.
 
 > Removing the site address bar from the top of the window in extended mode
 > did not work out: Chrome draws it itself. That is why browser mode is the
@@ -127,15 +130,19 @@ queue coming back after a reload, the cache.
   on Windows), Desktop and mounted drives. A folder passed to the server as an
   argument comes first.
 - Sort by name, reverse, shuffle, change the order of files by hand.
-- Two list views: rows with duration, size and track count, or a grid of
-  frames taken from the files.
+- Two list views: rows and a grid. A row has a frame from the file in the
+  video’s proportions, the name, duration, size and track count. The grid has
+  frames only.
+- The crosshair button in the queue header scrolls the list to the current
+  file.
 - Auto-advance to the next file. Repeat of the queue or of one file. A summary
   card at the end.
 - Speed from 0.5× to 2×. Seeking by mouse and keyboard, a time hint above the
   bar, a buffered marker.
 - The watch position is remembered for each file. Within the first 30 seconds
   there is nothing to return to, and the last minute counts as a finished
-  episode, so there is no return there.
+  episode, so there is no return there. In the queue that place is marked by a
+  thin line at the bottom of the file’s frame.
 - The volume is remembered.
 - With the local server, a page reload brings back the queue and marks the
   file you stopped on. It starts playing when you press play, otherwise just
@@ -153,6 +160,12 @@ queue coming back after a reload, the cache.
   right and open on hover, and the studio name on the audio track button gets
   shorter. With fewer than four letters left, only the icon stays on the
   button.
+- Long file names and paths are cut on the right, and the tooltip on hover
+  shows them whole.
+- While the queue is empty it holds the project description, and its header
+  shows the “About” title instead of the view and order buttons. If the queue
+  is closed, the “About” button at the top left opens it. In a window narrower
+  than 820 pixels the player starts with the queue closed.
 - General player settings under the gear at the top right: the file panel
   overlays the video or shrinks it (in a window narrower than 820 pixels it
   always overlays), changing the order of files by hand, hiding the controls

@@ -7,7 +7,7 @@
    differently on every machine, and it has no business reading those
    files in the first place.
 
-   Three fixtures, one per path through the server:
+   Four fixtures: one per path through the server, and a long one.
 
      native.mp4    H.264 + AAC in MP4        served untouched
      release.mkv   H.264 + AC-3 in MKV,      remuxed, audio re-encoded,
