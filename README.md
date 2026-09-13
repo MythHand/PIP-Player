@@ -134,7 +134,8 @@ queue coming back after a reload, the cache.
   video’s proportions, the name, duration, size and track count. The grid has
   frames only.
 - The crosshair button in the queue header scrolls the list to the current
-  file.
+  file. When another file starts, the list scrolls to it by itself, which can
+  be turned off in the settings.
 - Auto-advance to the next file. Repeat of the queue or of one file. A summary
   card at the end.
 - Speed from 0.5× to 2×. Seeking by mouse and keyboard, a time hint above the
@@ -168,13 +169,13 @@ queue coming back after a reload, the cache.
   than 820 pixels the player starts with the queue closed.
 - General player settings under the gear at the top right: the file panel
   overlays the video or shrinks it (in a window narrower than 820 pixels it
-  always overlays), changing the order of files by hand, hiding the controls
-  on auto-advance, typeface, language. Also there: the hotkey list and the
-  server cache.
+  always overlays), changing the order of files by hand, scrolling the queue
+  to the current file, hiding the controls on auto-advance, typeface,
+  language. Also there: the hotkey list and the server cache.
 - The cache is one bar: the fill shows the space taken, the knob sets the
   limit, 24 GB by default. The bar ends where the room for the cache on the
   disk ends: the space it takes plus the free space. The limit does not go
-  below 8 GB. If a saved limit no longer fits on the disk, the knob turns into
+  below 4 GB. If a saved limit no longer fits on the disk, the knob turns into
   a ring and a warning appears under the bar. The server learns the disk size
   on Node 18.15 and newer; on an older one the scale is built from the limit
   and the space taken. Clearing removes everything except the file playing,

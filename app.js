@@ -194,6 +194,7 @@ function fitDeck() {
        share the row by what they hold rather than half and half */
     if (!fitLabel(room()) || deckRight.scrollWidth > room()) deck.classList.add('deck--offcentre');
   }
+  if (!deck.classList.contains('deck--packed')) closePack();   // unfolded, the tray is gone with its state
 }
 /* Shortens the studio name to the room its side has. False when even
    the icon alone leaves the side too wide. */
@@ -210,15 +211,28 @@ function fitLabel(room) {
 }
 new ResizeObserver(fitDeck).observe(deckRow);
 
-/* Touch and keyboard have no hover, so the gear opens the tray on a
-   click as well. A click anywhere else closes it. */
-btnPack.onclick = e => {
-  e.stopPropagation();
-  const open = !deckPack.classList.contains('open');
-  deckPack.classList.toggle('open', open);
-  btnPack.setAttribute('aria-expanded', String(open));
-};
+/* The tray shows while the pointer is over the gear or the tray, and
+   goes 2.4 s after the pointer leaves; a click inside does not pin it.
+   It waits while the speed menu in it is open. A touch screen has no
+   hover, so a tap on the gear shows it as well, and it goes the same way
+   once the finger is lifted. A click anywhere else closes it at once. */
+const PACK_LINGER = 2400;
+let packT = 0;
+function showPack() {
+  if (!deck.classList.contains('deck--packed')) return;   // unfolded, there is no tray to show
+  clearTimeout(packT);
+  deckPack.classList.add('open');
+  btnPack.setAttribute('aria-expanded', 'true');
+}
+function lingerPack() {
+  clearTimeout(packT);
+  packT = setTimeout(() => rateMenu.classList.contains('open') ? lingerPack() : closePack(), PACK_LINGER);
+}
+deckPack.addEventListener('pointerenter', showPack);
+deckPack.addEventListener('pointerleave', lingerPack);
+btnPack.onclick = e => { e.stopPropagation(); showPack(); };
 function closePack() {
+  clearTimeout(packT);
   deckPack.classList.remove('open');
   btnPack.setAttribute('aria-expanded', 'false');
 }
@@ -233,9 +247,13 @@ function fitMenu(m) {
   m.style.translate = '';
   if (!m.classList.contains('open')) return;
   const right = m.ownerDocument.documentElement.clientWidth, pad = 12;
-  const r = m.getBoundingClientRect();
-  const dx = r.right > right - pad ? right - pad - r.right
-           : r.left < pad ? pad - r.left : 0;
+  /* measured without the slide of the opening, which is still in its
+     first frame here: taken for an overflow, it moved the settings 60px
+     off their place */
+  const r = m.getBoundingClientRect(), tx = new DOMMatrixReadOnly(getComputedStyle(m).transform).m41;
+  const left = r.left - tx, rightEdge = r.right - tx;
+  const dx = rightEdge > right - pad ? right - pad - rightEdge
+           : left < pad ? pad - left : 0;
   if (dx) m.style.translate = Math.round(dx) + 'px 0';
 }
 const fitMenus = () => MENUS.forEach(fitMenu);
@@ -1138,15 +1156,28 @@ deck.addEventListener('pointerleave', () => { overDeck = false; poke(); });
    the video, whatever the setting says, and behaves as it does in that
    mode: a click on the picture closes it. */
 const queueOverlays = () => !queueDocked();
-let clickT = null, justClosedQueue = 0;
+let clickT = null, justClosed = 0;
+/* a menu of the deck or of the settings, or the tray of the gear, in
+   this tab or in the extended PiP window */
+const panelOpen = () => anyMenuOpen()
+  || (deck.classList.contains('deck--packed') && deckPack.classList.contains('open'))
+  || !!(pipView && pipView.querySelector('.menu.open'));
 video.addEventListener('click', e => {
   e.preventDefault();
+  /* With something open over the picture, a click on the picture closes
+     it and does nothing else: it neither pauses nor starts the video. */
+  if (panelOpen()) {
+    clearTimeout(clickT); clickT = null;
+    justClosed = Date.now();
+    closeMenus(); closePack(); closePipMenus();
+    return;
+  }
   /* A click on the picture closes the file panel only while that panel
      covers the picture. In the mode where it narrows the video there is
      no overlap, so the click does the usual thing and pauses. */
   if (state.queueOpen && !state.pipWin && queueOverlays()) {
     clearTimeout(clickT); clickT = null;
-    justClosedQueue = Date.now();
+    justClosed = Date.now();
     toggleQueue(false);
     return;
   }
@@ -1156,7 +1187,7 @@ video.addEventListener('click', e => {
 });
 video.addEventListener('dblclick', e => {
   e.preventDefault(); clearTimeout(clickT); clickT = null;
-  if (queueOverlays() && Date.now() - justClosedQueue < 400) return;   // the second click of a close is not a fullscreen request
+  if (Date.now() - justClosed < 400) return;   // the second click of a close is not a fullscreen request
   if (!state.pipWin) toggleFull();
 });
 
@@ -1305,7 +1336,7 @@ function buildAudioMenu() {
       <span class="menu__body"><span class="menu__main"></span>${o.sub ? '<span class="menu__sub"></span>' : ''}</span>`;
     b.querySelector('.menu__main').textContent = o.main;
     if (o.sub) b.querySelector('.menu__sub').textContent = o.sub;
-    b.onclick = () => { pickAudio(o); audioMenu.classList.remove('open'); };
+    b.onclick = () => { pickAudio(o); markPicked(b); };
     audioMenu.append(b);
   }
 }
@@ -1395,7 +1426,7 @@ function buildSubsMenu() {
       <span class="menu__body"><span class="menu__main"></span>${sub ? '<span class="menu__sub"></span>' : ''}</span>`;
     b.querySelector('.menu__main').textContent = main;
     if (sub) b.querySelector('.menu__sub').textContent = sub;
-    b.onclick = () => { if (!disabled) { pickSub(off); subsMenu.classList.remove('open'); } };
+    b.onclick = () => { if (!disabled) { pickSub(off); markPicked(b); } };
     list.append(b);
   };
 
@@ -1587,7 +1618,7 @@ const KEYS_UI = [
 
    The scale is the disk. It starts at zero and ends at what the cache
    could take there: the space it already holds plus the space still
-   free. The knob stops at 8 GB at the low end and at that edge at the
+   free. The knob stops at 4 GB at the low end and at that edge at the
    high end. Free space changes without us, so a limit saved earlier can
    end up past the edge; then the knob sits on the edge as a ring and
    the line under the bar says why.
@@ -1784,6 +1815,14 @@ btnSubs.onclick = e => {
 function closeMenus(except) {
   for (const m of MENUS) if (m && m !== except) m.classList.remove('open');
 }
+/* A choice in the track, subtitle, PiP mode or speed menu keeps the menu
+   open, as the settings do: the tick moves to the item picked, in place,
+   so a long list stays where it was scrolled. The menu closes the usual
+   ways: its button, another menu, a click outside it or on the picture,
+   Esc. */
+function markPicked(b) {
+  for (const x of b.parentNode.querySelectorAll('.menu__item')) x.classList.toggle('sel', x === b);
+}
 function anyMenuOpen() {
   return MENUS.some(m => m && m.classList.contains('open'));
 }
@@ -1876,10 +1915,9 @@ function paintActive() {
   }
 }
 
-/* The curve of the panel sliding out, read from --slide in styles.css so
-   the scroll to a file moves the same way and there is one place to
-   tune it. scrollTo with smooth behaviour follows the browser's own
-   curve and cannot take another. */
+/* The scroll to a file, read from --glide in styles.css so it is tuned
+   there with the rest of the motion. scrollTo with smooth behaviour
+   follows the browser's own curve and cannot take another. */
 function cubicBezier(x1, y1, x2, y2) {
   const cx = 3 * x1, bx = 3 * (x2 - x1) - cx, ax = 1 - cx - bx;
   const cy = 3 * y1, by = 3 * (y2 - y1) - cy, ay = 1 - cy - by;
@@ -1897,7 +1935,7 @@ function cubicBezier(x1, y1, x2, y2) {
   };
 }
 const SLIDE = (() => {
-  const v = getComputedStyle(document.documentElement).getPropertyValue('--slide');
+  const v = getComputedStyle(document.documentElement).getPropertyValue('--glide');
   const m = /cubic-bezier\(([^)]+)\)/.exec(v);
   return { ms: parseFloat(v) || 620, ease: cubicBezier(...(m ? m[1] : '.32,.72,0,1').split(',').map(Number)) };
 })();
@@ -2458,7 +2496,7 @@ function buildPipMenu() {
       if (disabled) return;
       state.pipMode = m.id;
       saveStr('pip.pipMode', m.id);
-      pipMenu.classList.remove('open');
+      markPicked(b);
       toast(t('pip.switched', { name: t(m.main) }));
       if (state.pipWin) state.pipWin.close();
       else if (document.pictureInPictureElement) document.exitPictureInPicture().catch(() => {});
@@ -2553,7 +2591,8 @@ function closePipMenus(except) {
 
 /* A press in the window. The track and subtitle buttons open their menu
    in the window only, built by the tab's own code and mirrored in. A
-   choice in a menu, and every other button, presses its twin in the tab. */
+   choice in a menu, and every other button, presses its twin in the tab;
+   a choice keeps the menu open, as it does in the tab (markPicked). */
 function pipClick(e) {
   const t = e.target;
   if (t.closest('.seek, .vol__bar')) return;          // the sliders handle themselves
@@ -2571,7 +2610,6 @@ function pipClick(e) {
   if (!b) { if (!t.closest('.menuwrap')) closePipMenus(); return; }
   const twin = nodeAt(stage, pathIn(pipView, b));
   if (twin) twin.click();
-  if (b.classList.contains('menu__item')) closePipMenus();
 }
 
 async function openDocPip() {
@@ -2836,7 +2874,7 @@ function buildRateMenu() {
     b.innerHTML = `<span class="menu__tick">${phSvg(PH.check)}</span>
       <span class="menu__body"><span class="menu__main"></span></span>`;
     b.querySelector('.menu__main').textContent = r === 1 ? t('rate.normal') : r + '×';
-    b.onclick = () => { video.playbackRate = r; rateMenu.classList.remove('open'); };
+    b.onclick = () => { video.playbackRate = r; markPicked(b); };
     rateMenu.append(b);
   }
 }

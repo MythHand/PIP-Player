@@ -374,7 +374,7 @@ describe('the cache limit', { skip: !ffmpeg && 'no ffmpeg' }, () => {
 
   test('reports the floor, the limit and the disk', async () => {
     const c = await json('/api/cache');
-    assert.equal(c.min, 8 * GB);
+    assert.equal(c.min, 4 * GB);
     assert.ok(c.free > 0 && c.total >= c.free, 'free and total come from the disk');
     assert.equal(c.max, c.bytes + c.free, 'the ceiling is what the cache takes plus what is free');
     assert.ok(c.limit >= c.min);
@@ -388,8 +388,8 @@ describe('the cache limit', { skip: !ffmpeg && 'no ffmpeg' }, () => {
     assert.equal((await json('/api/cache')).limit, 40 * GB);
   });
 
-  test('does not go below 8 GB', async () => {
-    assert.equal((await (await setLimit(2)).json()).limit, 8 * GB);
+  test('does not go below 4 GB', async () => {
+    assert.equal((await (await setLimit(2)).json()).limit, 4 * GB);
   });
 
   test('has no fixed ceiling, only the disk', async () => {

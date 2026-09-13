@@ -29,11 +29,13 @@ fs.mkdirSync(CACHE, { recursive: true });
    the cache folder, so it survives a restart; PIP_CACHE_GB only gives
    the starting value until the limit is changed there.
 
-   There is a floor of 8 GB and no fixed ceiling. The ceiling is the
+   There is a floor of 4 GB, room for the episode playing and the next
+   one prepared at the size of an ordinary 1080p episode, and no fixed
+   ceiling. The ceiling is the
    disk: the cache can grow to what it already takes plus what is still
    free, and a limit set in the player is cut down to that. */
 const GB = 1024 ** 3;
-const LIMIT_MIN = 8;
+const LIMIT_MIN = 4;
 const LIMIT_FILE = path.join(CACHE, 'limit.json');
 const clampGb = n => Math.max(LIMIT_MIN, Math.round(Number(n) || 0));
 let cacheLimitGb = clampGb(process.env.PIP_CACHE_GB || 24);

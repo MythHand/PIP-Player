@@ -195,8 +195,20 @@ const SCRIPT = `
   window.__step('cache');
   { const st = $('#stage'); st.classList.remove('pip-mode'); st.removeAttribute('style'); }
   await window.__settled();
+  /* The bar is checked against the very answer it was drawn from. A
+     second request reads a disk whose free space has already moved on,
+     and the end of the scale is the taken space plus the free one: a
+     few kilobytes written anywhere in between, a frame for the queue
+     among them, and the two no longer matched. */
+  const cacheAnswers = [], realFetch = window.fetch;
+  window.fetch = async (...a) => {
+    const r = await realFetch(...a);
+    if (String(a[0]).split('?')[0] === '/api/cache' && !(a[1] && a[1].method === 'POST')) cacheAnswers.push(await r.clone().json());
+    return r;
+  };
   $('#btnGear').click();
   await until(() => $('.cache__bar') && $('.cache__bar').getAttribute('aria-valuenow'));
+  window.fetch = realFetch;
   const cbar = $('.cache__bar');
   /* a still pointer puts the stage to sleep and the gear stops taking
      the pointer, which hit testing would read as the menu being under
@@ -217,7 +229,7 @@ const SCRIPT = `
     max: Number(cbar.getAttribute('aria-valuemax')),
     knobAt: (leftOf(knob) + knob.getBoundingClientRect().width / 2) / railW,
     usedStyle: parseFloat($('.cache__used').style.width),
-    stat: await (await fetch('/api/cache')).json(),
+    stat: cacheAnswers[0],
     note: $('.cache__note').textContent,
     size: $('.cache__size').textContent,
   };
@@ -467,7 +479,7 @@ describe('the end of the queue', { skip }, () => {
 describe('the cache bar', { skip }, () => {
   test('it shows the limit the server has', () => {
     assert.equal(R.cache.limit, 24);
-    assert.equal(R.cache.min, 8);
+    assert.equal(R.cache.min, 4);
   });
 
   test('the scale ends where the disk ends', () => {

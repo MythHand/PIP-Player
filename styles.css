@@ -5,7 +5,10 @@
 
 :root{
   /* the queue sliding out, and the shift of the centre that follows */
-  --slide: 620ms cubic-bezier(.32,.72,0,1);
+  --slide: 420ms cubic-bezier(.35,.25,.25,1);
+  /* the queue list scrolling to a file, read by the player code: the
+     curve of the slide, at the length the slide used to have */
+  --glide: 620ms cubic-bezier(.32,.72,0,1);
   /* a queue card becoming the current one and back: the same curve,
      shorter, so the change is seen but does not hang about */
   --select: 360ms cubic-bezier(.32,.72,0,1);
@@ -222,7 +225,9 @@ svg.ph{ fill:currentColor; stroke:none; }
 .gear.menuwrap{
   position:absolute; top:0; right:0; z-index:9;
   padding:20px 36px;
-  transition:opacity .24s, transform .24s;
+  /* the z-index waits for the menu to finish leaving (--gear-out), or
+     it would sink under the queue halfway out */
+  transition:opacity .24s, transform .24s, z-index 0s var(--gear-out);
 }
 .stage.idle .gear{ opacity:0; transform:translateY(-8px); pointer-events:none; }
 /* the description of the project, mirrored to the settings: top left,
@@ -373,9 +378,13 @@ svg.ph{ fill:currentColor; stroke:none; }
 .rb--icon > span{ display:none; }
 
 /* On the right speed, loop and autoplay fold into one gear, .deck--packed.
-   The three then open above it on hover, on focus, or on a click for a
-   screen without a mouse. The tray stays up while the speed menu inside
-   it is open, otherwise the menu would vanish with it. */
+   The three then open above it: the player code shows the tray while the
+   pointer is over the gear or the tray and for a while after it leaves
+   (.open), and keyboard focus shows it too. Focus from a mouse click does
+   not: a clicked button keeps focus, and the tray used to stay pinned up.
+   The tray stays up while the speed menu inside it is open, and when it
+   hides it waits for that menu to finish going, or the menu would vanish
+   with it halfway out. */
 .deck__pack{ position:relative; }
 .deck__tray{ display:flex; align-items:center; gap:4px; }
 .deck__pack .deck__more{ display:none; }
@@ -385,14 +394,14 @@ svg.ph{ fill:currentColor; stroke:none; }
   display:none; padding:4px; border-radius:999px;
   background:rgba(22,23,26,.96);
   border:1px solid var(--line-2); box-shadow:var(--shadow);
+  transition:display 170ms allow-discrete;
 }
 /* the gap between the gear and the tray belongs to the tray, or the
    hover would drop on the way up */
 .deck--packed .deck__tray::after{ content:''; position:absolute; left:0; right:0; top:100%; height:12px; }
-.deck--packed .deck__pack:hover .deck__tray,
-.deck--packed .deck__pack:focus-within .deck__tray,
+.deck--packed .deck__pack:has(:focus-visible) .deck__tray,
 .deck--packed .deck__pack.open .deck__tray,
-.deck--packed .deck__pack:has(.menu.open) .deck__tray{ display:flex; z-index:20; }
+.deck--packed .deck__pack:has(.menu.open) .deck__tray{ display:flex; z-index:20; transition:display 0s; }
 .deck--packed .deck__pack:hover .deck__more,
 .deck--packed .deck__pack.open .deck__more{ background:var(--glass-hi); color:var(--tx-1); }
 
@@ -489,7 +498,7 @@ svg.ph{ fill:currentColor; stroke:none; }
    and the tray are stacking contexts of their own, so they rise while
    a menu inside them is open. */
 .menu{ z-index:20; }
-.gear.menuwrap:has(.menu.open){ z-index:20; }
+.gear.menuwrap:has(.menu.open){ z-index:20; transition:opacity .24s, transform .24s, z-index 0s; }
 .menu__title{ padding:8px 12px 6px; font-size:calc(11.5px + var(--fs)); color:var(--tx-3); }
 .menu__item{
   display:flex; align-items:flex-start; gap:11px; width:100%;
@@ -509,6 +518,26 @@ svg.ph{ fill:currentColor; stroke:none; }
 
 /* to the left, for menus in the left group of the deck */
 .menu--left{ left:0; right:auto; }
+/* The audio track, subtitle, PiP mode and speed menus of the deck come
+   and go the way the gear menu does, on the same curves, only quicker and
+   over a short way: up out of the deck when they open, back down when
+   they close. Only these four. transform, as for the gear menu: fitMenu
+   keeps a menu inside the window through translate. */
+#audioMenu, #subsMenu, #pipMenu, #rateMenu{
+  opacity:0; transform:translateY(12px);
+  transition:opacity 110ms cubic-bezier(.35,0,.65,1),
+             transform 170ms cubic-bezier(.25,.45,.55,.95),
+             display 170ms allow-discrete;
+}
+#audioMenu.open, #subsMenu.open, #pipMenu.open, #rateMenu.open{
+  opacity:1; transform:none;
+  transition:opacity 120ms cubic-bezier(.33,.8,.45,1),
+             transform 200ms cubic-bezier(.2,.8,.3,1),
+             display 0s allow-discrete;
+}
+@starting-style{
+  #audioMenu.open, #subsMenu.open, #pipMenu.open, #rateMenu.open{ opacity:0; transform:translateY(12px); }
+}
 /* downwards, for the gear menu, which sits at the top of the stage */
 .menu--down{ top:calc(100% + 10px); bottom:auto; }
 
@@ -1263,10 +1292,11 @@ video::cue{
    separate modifier rather than in the shared .menu--split. Declared
    below it, otherwise it would not override.
 
-   The height has room to spare so that ten languages fit whole: at the
-   previous 420px the list hit the edge and scrolled by a couple of
-   pixels. 590 rather than 560 since the Esc line names the extended PiP
-   window, and in Russian and German it takes a third line.
+   The height has room to spare so that every column fits whole: at the
+   previous 420px the language list hit the edge and scrolled by a couple
+   of pixels. 632 now, since the settings column is the tallest: with the
+   queue scrolling setting it holds six rows and the cache, and at 590 it
+   scrolled by 42px.
 
    Anchoring to the gear. An absolutely positioned layer is measured
    from the padding box of its wrapper, and that wrapper has padding
@@ -1274,13 +1304,43 @@ video::cue{
    below it, as if it had come loose. Those paddings are subtracted back
    and a small one of our own is added: the right edge reaches slightly
    past the icon, and the gap on top is 12px. */
-.gear.menuwrap{ --gear-pad-x:36px; --gear-pad-y:20px; }
+.gear.menuwrap{ --gear-pad-x:36px; --gear-pad-y:20px; --gear-out:260ms; }
 .menu--gear{
   top:calc(100% - var(--gear-pad-y) + 12px);
   right:calc(var(--gear-pad-x) - 10px);
   min-width:min(892px, calc(100vw - 60px));
   max-width:min(892px, calc(100vw - 60px));
-  max-height:min(590px, calc(100vh - 120px));
+  /* the menu starts 72px from the top, so the window leaves it all but
+     72px and a 16px margin at the bottom; the old 120px reserve cut the
+     settings short in a window of ordinary height */
+  max-height:min(632px, calc(100vh - 88px));
+}
+/* Opening: the menu comes from the gear's side, sliding 60px left into
+   place, fast at first and with no long crawl at the end, and the fade
+   is over before the slide is. Closing goes back the same way: the slide
+   leaves at once and keeps its pace while the menu is still seen, and
+   the fade is over while the menu is still moving, so it never stops
+   first and then fades on the spot. The closing fade is the shorter of
+   the two. No timing here is linear.
+   transform rather than translate: fitMenu keeps a menu inside the
+   window through the translate property, and the two add up. display
+   takes part in the transition, so the menu stays drawn until its way
+   out is over, and @starting-style gives the way in a point to start
+   from, since a menu that was display:none has none. */
+.menu--gear{
+  opacity:0; transform:translateX(60px);
+  transition:opacity 170ms cubic-bezier(.35,0,.65,1),
+             transform var(--gear-out) cubic-bezier(.25,.45,.55,.95),
+             display var(--gear-out) allow-discrete;
+}
+.menu--gear.open{
+  opacity:1; transform:none;
+  transition:opacity 180ms cubic-bezier(.33,.8,.45,1),
+             transform 300ms cubic-bezier(.2,.8,.3,1),
+             display 0s allow-discrete;
+}
+@starting-style{
+  .menu--gear.open{ opacity:0; transform:translateX(60px); }
 }
 .menu--gear .menu__col--keys{ flex:0 0 270px; }
 .menu--gear .menu__col--side{ flex:0 0 178px; }
