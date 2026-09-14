@@ -22,8 +22,8 @@ body:
     attributes:
       label: Server
       options:
-        - With the server
-        - Without the server, index.html opened directly
+        - With the local server
+        - Without the local server, index.html opened directly
     validations:
       required: true
   - type: dropdown
