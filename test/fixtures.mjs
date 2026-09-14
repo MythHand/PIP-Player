@@ -80,64 +80,78 @@ export async function build() {
   if ([made.native, made.release, made.legacy, made.long].every(f => fs.existsSync(f)))
     return made;
 
-  await fsp.writeFile(made.subs, SRT, 'utf8');
-  await fsp.writeFile(made.subsLong, SRT_LONG, 'utf8');
+  /* Nothing is written into place directly. The suites that need media
+     run as separate processes at the same time, and on a fresh machine
+     (or after the system has cleared its temporary folder) each of them
+     finds the fixtures missing and builds them. Written straight into
+     the shared folder, two ffmpeg runs wrote the same file at once and
+     left a broken MP4 that every later run accepted as ready. So each
+     run builds in a folder of its own and then moves the finished files
+     over: a rename is atomic, so whichever run lands last, the file in
+     place is always a whole one. */
+  const work = await fsp.mkdtemp(path.join(os.tmpdir(), 'pip-player-test-build-'));
+  const w = n => path.join(work, n);
+  try {
+    await fsp.writeFile(w('lines.srt'), SRT, 'utf8');
+    await fsp.writeFile(w('lines-long.srt'), SRT_LONG, 'utf8');
 
-  await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y',
-    ...SRC, ...TONE(440),
-    '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest',
-    '-movflags', '+faststart', made.native]);
+    await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y',
+      ...SRC, ...TONE(440),
+      '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest',
+      '-movflags', '+faststart', w('native.mp4')]);
 
-  /* Two audio tracks with language and title, so that the track list,
-     the carry-over between files and the studio names all have
-     something real to work on. */
-  await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y',
-    ...SRC, ...TONE(440), ...TONE(660), '-i', made.subs,
-    '-map', '0:v', '-map', '1:a', '-map', '2:a', '-map', '3:s',
-    '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
-    '-c:a', 'ac3', '-c:s', 'srt', '-shortest',
-    '-metadata:s:a:0', 'language=rus', '-metadata:s:a:0', 'title=Studio One',
-    '-metadata:s:a:1', 'language=eng', '-metadata:s:a:1', 'title=Original',
-    '-metadata:s:s:0', 'language=eng',
-    made.release]);
+    /* Two audio tracks with language and title, so that the track list,
+       the carry-over between files and the studio names all have
+       something real to work on. */
+    await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y',
+      ...SRC, ...TONE(440), ...TONE(660), '-i', w('lines.srt'),
+      '-map', '0:v', '-map', '1:a', '-map', '2:a', '-map', '3:s',
+      '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+      '-c:a', 'ac3', '-c:s', 'srt', '-shortest',
+      '-metadata:s:a:0', 'language=rus', '-metadata:s:a:0', 'title=Studio One',
+      '-metadata:s:a:1', 'language=eng', '-metadata:s:a:1', 'title=Original',
+      '-metadata:s:s:0', 'language=eng',
+      w('release.mkv')]);
 
-  await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y',
-    ...SRC, ...TONE(440),
-    '-c:v', 'mpeg4', '-pix_fmt', 'yuv420p', '-c:a', 'libmp3lame', '-shortest',
-    made.legacy]);
+    await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y',
+      ...SRC, ...TONE(440),
+      '-c:v', 'mpeg4', '-pix_fmt', 'yuv420p', '-c:a', 'libmp3lame', '-shortest',
+      w('legacy.avi')]);
 
-  /* Three minutes. Returning to a saved position only happens past the
-     thirtieth second and no closer than a minute to the end, so at
-     ninety seconds the window between those two rules is empty and
-     nothing can ever be resumed. At a hundred and eighty it is wide,
-     and a position of sixty seconds sits comfortably inside it.
+    /* Three minutes. Returning to a saved position only happens past the
+       thirtieth second and no closer than a minute to the end, so at
+       ninety seconds the window between those two rules is empty and
+       nothing can ever be resumed. At a hundred and eighty it is wide,
+       and a position of sixty seconds sits comfortably inside it.
 
-     Kept small on purpose: the browser has to download the whole thing
-     during the test, so the picture is coarse and the sound is thin.
+       Kept small on purpose: the browser has to download the whole thing
+       during the test, so the picture is coarse and the sound is thin.
 
-     Built in two passes on purpose. With the subtitle file as a fourth
-     input and -shortest in the same command, ffmpeg sat there and never
-     finished, and what it left behind was a truncated file that the
-     next run happily accepted as ready. So: encode the picture and the
-     sound, then mux the subtitles in by copying. */
-  const bare = made.long + '.novtt.mkv';
-  await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y',
-    ...src(180), ...tone(440, 180), ...tone(660, 180),
-    '-map', '0:v', '-map', '1:a', '-map', '2:a',
-    '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '35', '-pix_fmt', 'yuv420p',
-    '-c:a', 'ac3', '-b:a', '96k', '-shortest',
-    '-metadata:s:a:0', 'language=rus', '-metadata:s:a:0', 'title=Studio One',
-    '-metadata:s:a:1', 'language=eng', '-metadata:s:a:1', 'title=Original',
-    bare]);
-  await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y',
-    '-i', bare, '-i', made.subsLong,
-    '-map', '0', '-map', '1', '-c', 'copy', '-c:s', 'srt',
-    '-metadata:s:s:0', 'language=eng',
-    /* the container has to be named: ffmpeg guesses it from the
-       extension, and .part tells it nothing */
-    '-f', 'matroska', made.long + '.part']);
-  await fsp.rm(bare, { force: true });
-  await fsp.rename(made.long + '.part', made.long);
+       Built in two passes on purpose. With the subtitle file as a fourth
+       input and -shortest in the same command, ffmpeg sat there and never
+       finished. So: encode the picture and the sound, then mux the
+       subtitles in by copying. */
+    await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y',
+      ...src(180), ...tone(440, 180), ...tone(660, 180),
+      '-map', '0:v', '-map', '1:a', '-map', '2:a',
+      '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '35', '-pix_fmt', 'yuv420p',
+      '-c:a', 'ac3', '-b:a', '96k', '-shortest',
+      '-metadata:s:a:0', 'language=rus', '-metadata:s:a:0', 'title=Studio One',
+      '-metadata:s:a:1', 'language=eng', '-metadata:s:a:1', 'title=Original',
+      w('long.novtt.mkv')]);
+    await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y',
+      '-i', w('long.novtt.mkv'), '-i', w('lines-long.srt'),
+      '-map', '0', '-map', '1', '-c', 'copy', '-c:s', 'srt',
+      '-metadata:s:s:0', 'language=eng',
+      w('long.mkv')]);
+
+    /* On Windows a file another run already has open cannot be replaced;
+       that one is whole too, so it stays. */
+    for (const n of ['lines.srt', 'lines-long.srt', 'native.mp4', 'release.mkv', 'legacy.avi', 'long.mkv'])
+      await fsp.rename(w(n), at(n)).catch(e => { if (!fs.existsSync(at(n))) throw e; });
+  } finally {
+    await fsp.rm(work, { recursive: true, force: true });
+  }
 
   return made;
 }
