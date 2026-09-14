@@ -1,12 +1,9 @@
-<a href="https://mythhand.space/"><img src="assets/logo.svg" alt="MythHand"
-height="18"></a>
-
-# PIP Player
+# Local PIP Player <a href="https://mythhand.space/"><img src="assets/logo.svg" alt="MythHand" height="40" align="right"></a>
 
 [![node ≥18](https://img.shields.io/badge/node-%E2%89%A518-3a3a3a?style=flat-square&labelColor=111)](https://nodejs.org/)
 [![built with Claude Opus 5](https://img.shields.io/badge/built%20with-Claude%20Opus%205-3a3a3a?style=flat-square&labelColor=111)](https://www.anthropic.com/claude/opus)
 
-A browser player for watching in Picture-in-Picture.
+A local browser player for watching in Picture-in-Picture.
 
 The player is for watching a series in the browser’s Picture-in-Picture: a
 window with no frames and no extra shell, pinned on the screen. Episodes play
@@ -34,10 +31,10 @@ hands-on testing: Dimbo.
 Tested in Chrome. Extended Picture-in-Picture is built on the Document
 Picture-in-Picture API, which Chrome has since version 116.
 
-Without the server: open `index.html` and drop files or a folder onto the
-window. It plays what the browser can play on its own.
+Without the local server: open `index.html` and drop files or a folder onto
+the window. It plays what the browser can play on its own.
 
-With the server:
+With the local server:
 
 ```bash
 node server.mjs      # or npm start
@@ -48,15 +45,15 @@ on `PATH`. macOS, Windows, Linux. `start.command` and `start.bat` start the
 server and open the page on a double click, `start.sh` does the same from a
 terminal.
 
-| | without the server | with the server |
+| | without the local server | with the local server |
 |---|---|---|
 | MP4, MOV, WebM | plays | plays, the file is served as it is |
 | MKV | picture; sound if the track is AAC, MP3, Opus, Vorbis or FLAC | video copied, sound re-encoded to AAC |
 | HEVC | depends on the computer | re-encoded to H.264 |
 | TS, FLV, MPG, WMV, AVI | does not open | remuxed or re-encoded |
 
-Only with the server: audio track choice, subtitles, the disk browser, the
-queue coming back after a reload, the cache.
+Only with the local server: audio track choice, subtitles, the disk browser,
+the queue coming back after a reload, the cache.
 
 ## Picture-in-Picture
 
@@ -253,14 +250,13 @@ package.json    npm commands: start, check, test
 .gitattributes  line endings for the launchers
 .github/        the bug report form and the test run on GitHub
 assets/         README images, the logo, the mark and the avatar
+assets/fonts/   typefaces and their licences
 start.command   start, macOS
 start.bat       start, Windows
 start.sh        start, Linux
 README.md       this description
 README.ru.md    the description in Russian
 LICENSE         the MIT licence
-FixelDisplay/   typeface and its licence
-Inter/          typeface and its licence
 ```
 
 ## Checks

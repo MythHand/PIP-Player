@@ -1,12 +1,9 @@
-<a href="https://mythhand.space/"><img src="assets/logo.svg" alt="MythHand"
-height="18"></a>
-
-# PIP Player
+# Local PIP Player <a href="https://mythhand.space/"><img src="assets/logo.svg" alt="MythHand" height="40" align="right"></a>
 
 [![node ≥18](https://img.shields.io/badge/node-%E2%89%A518-3a3a3a?style=flat-square&labelColor=111)](https://nodejs.org/)
 [![built with Claude Opus 5](https://img.shields.io/badge/built%20with-Claude%20Opus%205-3a3a3a?style=flat-square&labelColor=111)](https://www.anthropic.com/claude/opus)
 
-Браузерный плеер для просмотра в «картинке в картинке».
+Локальный браузерный плеер для просмотра в «картинке в картинке».
 
 Плеер нужен, чтобы смотреть сериал в «картинке в картинке» браузера: окно без
 рамок и лишних оболочек, закреплённое на экране. Серии идут одна за другой,
@@ -33,10 +30,10 @@ English version: [README.md](README.md)
 Проверено в Chrome. Расширенный режим картинки в картинке построен на Document
 Picture-in-Picture API, в Chrome он есть с версии 116.
 
-Без сервера: открыть `index.html` и перетащить в окно файлы или папку. Играет
-то, что браузер умеет сам.
+Без локального сервера: открыть `index.html` и перетащить в окно файлы или
+папку. Играет то, что браузер умеет сам.
 
-С сервером:
+С локальным сервером:
 
 ```bash
 node server.mjs      # или npm start
@@ -47,15 +44,15 @@ node server.mjs      # или npm start
 сервер и открывают страницу по двойному клику, `start.sh` делает то же из
 терминала.
 
-| | без сервера | с сервером |
+| | без локального сервера | с локальным сервером |
 |---|---|---|
 | MP4, MOV, WebM | играет | играет, файл отдаётся как есть |
 | MKV | картинка; звук, если дорожка AAC, MP3, Opus, Vorbis или FLAC | видео копируется, звук перекодируется в AAC |
 | HEVC | зависит от компьютера | перекодируется в H.264 |
 | TS, FLV, MPG, WMV, AVI | не открывается | перепаковывается или перекодируется |
 
-Только с сервером: выбор звуковой дорожки, субтитры, обзор диска, возврат
-очереди после перезагрузки, кэш.
+Только с локальным сервером: выбор звуковой дорожки, субтитры, обзор диска,
+возврат очереди после перезагрузки, кэш.
 
 ## Картинка в картинке
 
@@ -251,14 +248,13 @@ package.json    команды npm: start, check, test
 .gitattributes  переносы строк для файлов запуска
 .github/        форма сообщения об ошибке и автотесты на GitHub
 assets/         картинки для README, логотип, знак и аватар
+assets/fonts/   шрифты и их лицензии
 start.command   запуск, macOS
 start.bat       запуск, Windows
 start.sh        запуск, Linux
 README.md       описание на английском
 README.ru.md    описание на русском
 LICENSE         лицензия MIT
-FixelDisplay/   шрифт и его лицензия
-Inter/          шрифт и его лицензия
 ```
 
 ## Проверка
