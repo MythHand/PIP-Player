@@ -1,4 +1,4 @@
-# Local PIP Player <a href="https://mythhand.space/"><img src="assets/logo.svg" alt="MythHand" height="40" align="right"></a>
+# Local PIP Player <a href="https://mythhand.space/#gh-light-mode-only"><img src="assets/logo.svg" alt="MythHand" height="40" align="right"></a><a href="https://mythhand.space/#gh-dark-mode-only"><img src="assets/logo-white.svg" alt="MythHand" height="40" align="right"></a>
 
 [![node ≥18](https://img.shields.io/badge/node-%E2%89%A518-3a3a3a?style=flat-square&labelColor=111)](https://nodejs.org/)
 [![built with Claude Opus 5](https://img.shields.io/badge/built%20with-Claude%20Opus%205-3a3a3a?style=flat-square&labelColor=111)](https://www.anthropic.com/claude/opus)
