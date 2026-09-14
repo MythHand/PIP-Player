@@ -429,14 +429,14 @@ describe('static files', { skip: !ffmpeg && 'no ffmpeg' }, () => {
   });
 
   test('a font face is served', async () => {
-    const r = await get('/FixelDisplay/FixelDisplay-Regular.woff2');
+    const r = await get('/assets/fonts/FixelDisplay/FixelDisplay-Regular.woff2');
     assert.equal(r.status, 200);
     assert.equal(r.headers.get('content-type'), 'font/woff2');
   });
 
   test('the font route does not lead out of the font folders', async () => {
-    assert.equal((await get('/FixelDisplay/../server.mjs')).status, 404);
-    assert.equal((await get('/FixelDisplay/nested/face.woff2')).status, 404);
+    assert.equal((await get('/assets/fonts/FixelDisplay/../server.mjs')).status, 404);
+    assert.equal((await get('/assets/fonts/FixelDisplay/nested/face.woff2')).status, 404);
   });
 
   test('the server itself is not downloadable', async () => {

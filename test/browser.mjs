@@ -42,7 +42,7 @@ export function findChrome() {
 }
 
 const CLIENT = ['index.html', 'styles.css', 'app.js', 'i18n.js'];
-const FONTS = ['FixelDisplay', 'Inter'];
+const FONTS = ['assets/fonts/FixelDisplay', 'assets/fonts/Inter'];
 
 /* Errors are collected from the head, before app.js runs: installed at
    the end of the body, the listener would miss anything the player

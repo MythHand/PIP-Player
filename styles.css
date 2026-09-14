@@ -67,19 +67,19 @@
    Inter is variable: one file for every weight instead of three. */
 @font-face{
   font-family:"Fixel Display"; font-weight:400; font-style:normal; font-display:swap;
-  src:url("FixelDisplay/FixelDisplay-Regular.woff2") format("woff2");
+  src:url("assets/fonts/FixelDisplay/FixelDisplay-Regular.woff2") format("woff2");
 }
 @font-face{
   font-family:"Fixel Display"; font-weight:500; font-style:normal; font-display:swap;
-  src:url("FixelDisplay/FixelDisplay-Medium.woff2") format("woff2");
+  src:url("assets/fonts/FixelDisplay/FixelDisplay-Medium.woff2") format("woff2");
 }
 @font-face{
   font-family:"Fixel Display"; font-weight:600; font-style:normal; font-display:swap;
-  src:url("FixelDisplay/FixelDisplay-SemiBold.woff2") format("woff2");
+  src:url("assets/fonts/FixelDisplay/FixelDisplay-SemiBold.woff2") format("woff2");
 }
 @font-face{
   font-family:"Inter"; font-weight:100 900; font-style:normal; font-display:swap;
-  src:url("Inter/Inter-VariableFont_opsz,wght.ttf") format("truetype");
+  src:url("assets/fonts/Inter/Inter-VariableFont_opsz,wght.ttf") format("truetype");
 }
 
 *{ box-sizing:border-box; margin:0; padding:0; }

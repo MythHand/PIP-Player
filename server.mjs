@@ -633,10 +633,11 @@ async function thumbFor(file, st) {
 
 /* ── static files ──────────────────────────────────────────── */
 const STATIC = new Set(['/index.html', '/styles.css', '/app.js', '/i18n.js']);
-/* Fonts live in folders; only the face files are served out of them,
-   and only by a plain name. No nested paths are possible here and the
-   name has to end in an extension, so ".." does not get through. */
-const FONT_RE = /^\/(?:FixelDisplay|Inter)\/[^/]+\.(?:woff2|ttf)$/;
+/* Fonts live in folders under assets/fonts; only the face files are
+   served out of them, and only by a plain name. No nested paths are
+   possible here and the name has to end in an extension, so ".." does
+   not get through. */
+const FONT_RE = /^\/assets\/fonts\/(?:FixelDisplay|Inter)\/[^/]+\.(?:woff2|ttf)$/;
 async function serveStatic(res, name) {
   const file = path.join(HERE, name === '/' ? 'index.html' : name);
   try {
