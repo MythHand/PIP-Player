@@ -30,9 +30,11 @@ const SCRIPT = `
   /* Waits for a condition, not for a fixed pause. The queue comes back
      only after the page has heard from the server, and with the other
      test files running in parallel that answer arrives later: a fixed
-     pause passed alone and failed in the full run. */
+     pause passed alone and failed in the full run. Each turn also gives
+     the browser real time (window.__tick), since what is waited on here
+     is often the video, and the video opens in real time. */
   const until = async (ok, tries = 300) => {
-    for (let i = 0; i < tries && !ok(); i++) await window.__settled();
+    for (let i = 0; i < tries && !ok(); i++) await window.__tick();
     return ok();
   };
   await until(() => document.querySelector('.item.active'));
@@ -78,14 +80,16 @@ const SCRIPT = `
     duration: v.duration, currentTime: v.currentTime,
     title: $('#titleName').textContent, prep: document.body.className + ' | ' + $('#stage').className,
   });
-  /* Long waits, because this part costs real seconds that the virtual
+  /* Long waits, because this part costs real time that the virtual
      clock cannot skip: the browser has to fetch three megabytes and
-     open the container. Measured at around three and a half seconds,
-     so the ceiling is set well above that rather than near it. */
-  for (let i = 0; i < 200 && !v.getAttribute('src'); i++) await window.__settled();
-  for (let i = 0; i < 400 && !(v.duration > 0); i++) await window.__settled();
+     open the container. Each turn holds the clock for a real pause
+     (window.__tick): with page time alone the clock ran out on a CI
+     runner while the video was still opening. The ceilings are set well
+     above what it takes rather than near it. */
+  for (let i = 0; i < 200 && !v.getAttribute('src'); i++) await window.__tick();
+  for (let i = 0; i < 400 && !(v.duration > 0); i++) await window.__tick();
   /* The jump back happens on loadedmetadata, one turn after it fires. */
-  for (let i = 0; i < 60 && v.currentTime === 0; i++) await window.__settled();
+  for (let i = 0; i < 60 && v.currentTime === 0; i++) await window.__tick();
   out.playing = {
     src: (v.getAttribute('src') || '').replace(/key=[a-f0-9]+/, 'key=…'),
     duration: Math.round(v.duration),
@@ -551,7 +555,7 @@ describe('a dropped file handed over to the server', { skip }, () => {
       await window.__settled();
       const $ = s => document.querySelector(s);
       const until = async (ok, tries = 400) => {
-        for (let i = 0; i < tries && !ok(); i++) await window.__settled();
+        for (let i = 0; i < tries && !ok(); i++) await window.__tick();
         return ok();
       };
       window.__step('build');

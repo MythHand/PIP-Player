@@ -19,6 +19,7 @@
    ═══════════════════════════════════════════════════════════ */
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
@@ -62,9 +63,27 @@ addEventListener('error', e => window.__errors.push(String(e.message)));
 addEventListener('unhandledrejection', e => window.__errors.push(String(e.reason)));
 </script>`;
 
+/* Real time for the page. Under a virtual time budget the page clock
+   stands still only while a request is in flight; the rest of the time
+   it races ahead of anything the browser does in real time. Opening a
+   video is such a thing: on a CI runner it took a few hundred real
+   milliseconds, and in that time the page clock ran through the whole
+   budget and the test stalled with the video still opening. So the
+   page can ask this server for a pause, and the request, held open for
+   that long, holds the clock with it. One server per test process, on
+   a port the system picks. */
+let holding = null;
+const holdServer = () => holding ||= new Promise(resolve => {
+  const srv = http.createServer((req, res) => {
+    const ms = Math.min(1000, Number(new URL(req.url, 'http://h').searchParams.get('ms')) || 0);
+    setTimeout(() => res.writeHead(204, { connection: 'close' }).end(), ms);
+  });
+  srv.listen(0, '127.0.0.1', () => { srv.unref(); resolve(srv.address().port); });
+});
+
 /* The report goes into the page as text, because --dump-dom is the only
    channel out of headless Chrome that needs no debugging protocol. */
-const report = budget => `
+const report = (budget, hold) => `
 <script>
 window.__report = obj => {
   const pre = document.createElement('pre');
@@ -78,6 +97,13 @@ window.__report = obj => {
    done, and a script that waits for the next frame then waits forever.
    Timers keep advancing, so a plain timeout is the reliable one. */
 window.__settled = () => new Promise(r => setTimeout(r, 50));
+/* For waiting on the video: a turn of the page clock, then a real pause
+   with the clock held (see holdServer), so that the browser gets real
+   time to open the file before the budget is spent. */
+window.__tick = async () => {
+  await window.__settled();
+  await fetch('http://127.0.0.1:${hold}/?ms=25', { mode: 'no-cors', cache: 'no-store' }).catch(() => {});
+};
 
 /* A step marker and a watchdog. Without them a page script that stops
    halfway reports nothing at all, and the failure reads as a broken
@@ -128,7 +154,7 @@ catch (e) { /* storage refused, the test will say so */ }
   const wrapped = '<script>(async () => { try {\n' + script +
     '\n} catch (e) { window.__report({ fatal: String((e && e.stack) || e),' +
     ' errors: window.__errors }); } })();</script>';
-  html = html.replace('</body>', report(budget) + '\n' + wrapped + '\n</body>');
+  html = html.replace('</body>', report(budget, await holdServer()) + '\n' + wrapped + '\n</body>');
   await fsp.writeFile(path.join(dir, 'index.html'), html, 'utf8');
   return dir;
 }
