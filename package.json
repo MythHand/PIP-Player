@@ -1,0 +1,23 @@
+{
+  "name": "pip-player",
+  "version": "1.0.0",
+  "description": "A browser player for watching in Picture-in-Picture.",
+  "private": true,
+  "license": "MIT",
+  "homepage": "https://github.com/MythHand/PIP-Player#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MythHand/PIP-Player.git"
+  },
+  "bugs": {
+    "url": "https://github.com/MythHand/PIP-Player/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "check": "node check.mjs",
+    "test": "node --test"
+  }
+}
