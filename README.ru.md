@@ -3,6 +3,9 @@ height="18"></a>
 
 # PIP Player
 
+[![node ≥18](https://img.shields.io/badge/node-%E2%89%A518-3a3a3a?style=flat-square&labelColor=111)](https://nodejs.org/)
+[![built with Claude Opus 5](https://img.shields.io/badge/built%20with-Claude%20Opus%205-3a3a3a?style=flat-square&labelColor=111)](https://www.anthropic.com/claude/opus)
+
 Браузерный плеер для просмотра в «картинке в картинке».
 
 Плеер нужен, чтобы смотреть сериал в «картинке в картинке» браузера: окно без
@@ -12,6 +15,9 @@ height="18"></a>
 
 Медиатеки и аккаунтов нет. Это локальный инструмент: MKV, AVI и прочее
 обрабатывает сервер на вашей машине, в сеть ничего не уходит.
+
+Код написан с помощью Claude Opus 5 в Claude Code. Идея, дизайн и проверка
+в работе: Dimbo.
 
 English version: [README.md](README.md)
 
@@ -33,7 +39,7 @@ Picture-in-Picture API, в Chrome он есть с версии 116.
 С сервером:
 
 ```bash
-node server.mjs
+node server.mjs      # или npm start
 ```
 
 Затем открыть `http://127.0.0.1:8777`. Нужны Node 18+ и `ffmpeg` с `ffprobe`
@@ -241,6 +247,9 @@ i18n.js         тексты интерфейса на десяти языках
 server.mjs      локальный сервер на ffmpeg
 check.mjs       проверка разметки, стилей и переводов
 test/           тесты
+package.json    команды npm: start, check, test
+.gitattributes  переносы строк для файлов запуска
+.github/        форма сообщения об ошибке и автотесты на GitHub
 assets/         картинки для README, логотип, знак и аватар
 start.command   запуск, macOS
 start.bat       запуск, Windows
@@ -255,8 +264,8 @@ Inter/          шрифт и его лицензия
 ## Проверка
 
 ```bash
-node check.mjs
-node --test
+node check.mjs       # или npm run check
+node --test          # или npm test
 ```
 
 `check.mjs` проверяет разметку, стили и словари без запуска. `node --test`

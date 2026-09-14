@@ -1,0 +1,50 @@
+# The form behind "New issue". Most problems with the player depend on
+# the file, the system, the browser and the ffmpeg build, so the form
+# asks for them up front instead of in the comments afterwards.
+name: Bug report
+description: A file does not play, something looks wrong or breaks.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What was done, what was expected, what happened instead.
+    validations:
+      required: true
+  - type: input
+    id: file
+    attributes:
+      label: File
+      description: Container, video and audio, for example MKV, HEVC, DTS 5.1.
+  - type: dropdown
+    id: server
+    attributes:
+      label: Server
+      options:
+        - With the server
+        - Without the server, index.html opened directly
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: System
+      options:
+        - macOS
+        - Windows
+        - Linux
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and version
+      description: The first line of chrome://version.
+    validations:
+      required: true
+  - type: input
+    id: ffmpeg
+    attributes:
+      label: ffmpeg version
+      description: The first line of `ffmpeg -version`. Only with the server.

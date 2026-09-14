@@ -3,6 +3,9 @@ height="18"></a>
 
 # PIP Player
 
+[![node ≥18](https://img.shields.io/badge/node-%E2%89%A518-3a3a3a?style=flat-square&labelColor=111)](https://nodejs.org/)
+[![built with Claude Opus 5](https://img.shields.io/badge/built%20with-Claude%20Opus%205-3a3a3a?style=flat-square&labelColor=111)](https://www.anthropic.com/claude/opus)
+
 A browser player for watching in Picture-in-Picture.
 
 The player is for watching a series in the browser’s Picture-in-Picture: a
@@ -12,6 +15,9 @@ and episodes can be switched right from that window.
 
 There is no library and no accounts. This is a local tool: MKV, AVI and the
 rest are handled by a server on your own machine, nothing goes to the network.
+
+The code is written with Claude Opus 5 in Claude Code. Idea, design and
+hands-on testing: Dimbo.
 
 Русская версия: [README.ru.md](README.ru.md)
 
@@ -34,7 +40,7 @@ window. It plays what the browser can play on its own.
 With the server:
 
 ```bash
-node server.mjs
+node server.mjs      # or npm start
 ```
 
 Then open `http://127.0.0.1:8777`. Needs Node 18+ and `ffmpeg` with `ffprobe`
@@ -243,6 +249,9 @@ i18n.js         interface texts in ten languages
 server.mjs      the local ffmpeg server
 check.mjs       check of markup, styles and translations
 test/           tests
+package.json    npm commands: start, check, test
+.gitattributes  line endings for the launchers
+.github/        the bug report form and the test run on GitHub
 assets/         README images, the logo, the mark and the avatar
 start.command   start, macOS
 start.bat       start, Windows
@@ -257,8 +266,8 @@ Inter/          typeface and its licence
 ## Checks
 
 ```bash
-node check.mjs
-node --test
+node check.mjs       # or npm run check
+node --test          # or npm test
 ```
 
 `check.mjs` checks the markup, styles and dictionaries without running them.
