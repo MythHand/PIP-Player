@@ -255,6 +255,7 @@ start.sh        запуск, Linux
 README.md       описание на английском
 README.ru.md    описание на русском
 LICENSE         лицензия MIT
+TRADEMARKS.md   знаки MythHand, на них MIT не распространяется
 ```
 
 ## Проверка
@@ -288,4 +289,4 @@ ffmpeg и Chrome; без Chrome тесты интерфейса пропуск�
 
 MIT, см. [LICENSE](LICENSE). У шрифтов свои лицензии, они указаны выше.
 Название MythHand, логотип, знак и аватар под MIT не попадают: права на них
-сохраняются за MythHand.
+сохраняются за MythHand, см. [TRADEMARKS.md](TRADEMARKS.md).

@@ -257,6 +257,7 @@ start.sh        start, Linux
 README.md       this description
 README.ru.md    the description in Russian
 LICENSE         the MIT licence
+TRADEMARKS.md   the MythHand marks, not covered by MIT
 ```
 
 ## Checks
@@ -291,4 +292,4 @@ variable.
 
 MIT, see [LICENSE](LICENSE). The typefaces have their own licences, listed
 above. The MythHand name, logo, mark and avatar are not covered by MIT: all
-rights to them stay with MythHand.
+rights to them stay with MythHand, see [TRADEMARKS.md](TRADEMARKS.md).
