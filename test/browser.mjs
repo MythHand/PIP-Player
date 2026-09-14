@@ -81,14 +81,24 @@ window.__settled = () => new Promise(r => setTimeout(r, 50));
 
 /* A step marker and a watchdog. Without them a page script that stops
    halfway reports nothing at all, and the failure reads as a broken
-   harness instead of naming the step that hung. */
+   harness instead of naming the step that hung. A step can also leave
+   window.__state behind, a function saying what it is waiting on, so
+   that a stall on a machine nobody can look at (a CI runner) says more
+   than the name of the step. */
 window.__step = name => { window.__at = name; };
 window.__at = 'start';
 setTimeout(() => {
-  if (!document.getElementById('pip-test-out'))
-    window.__report({ stalled: window.__at, errors: window.__errors });
+  if (document.getElementById('pip-test-out')) return;
+  let state = null;
+  try { state = window.__state ? window.__state() : null; } catch (e) { state = String(e); }
+  window.__report({ stalled: window.__at, state, errors: window.__errors });
 }, ${Math.max(1000, budget - 1500)});   // inside the budget, or it never fires
 </script>`;
+
+/* The failure message for a page that stalled: the step, the state the
+   step said it was in, and whatever the page threw on the way. */
+export const stalledAt = r => 'the page script stopped at: ' + r.stalled + '\n' +
+  JSON.stringify({ state: r.state, errors: r.errors }, null, 2);
 
 /* Copies the shipping files next to a page that carries the test
    script. Returns the directory. */

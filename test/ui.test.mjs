@@ -9,7 +9,7 @@
    ═══════════════════════════════════════════════════════════ */
 import { test, before, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { openFile, findChrome } from './browser.mjs';
+import { openFile, findChrome, stalledAt } from './browser.mjs';
 
 const chrome = findChrome();
 const P0 = 204.81;      // the normalisation constant of the icon set
@@ -171,7 +171,7 @@ before(async () => {
   if (!chrome) return;
   R = await openFile('ui', SCRIPT, { fonts: true, width: 1280, height: 800 });
   if (R.fatal) throw new Error('the page script broke:\n' + R.fatal);
-  if (R.stalled) throw new Error('the page script stopped at: ' + R.stalled);
+  if (R.stalled) throw new Error(stalledAt(R));
 }, { timeout: 120000 });
 
 const skip = !chrome && 'no Chrome found; set CHROME to its path';

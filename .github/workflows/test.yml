@@ -1,4 +1,5 @@
-# Runs the test suite on every push to main and on every pull request.
+# Runs the test suite on every push to main and on every pull request,
+# and by hand from the Actions tab.
 # Nothing is installed from npm: the project has no dependencies, the
 # runner only needs ffmpeg for the test media and Chrome for the
 # interface tests, and the Ubuntu image already carries Chrome.
@@ -8,6 +9,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read

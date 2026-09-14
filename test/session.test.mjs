@@ -14,7 +14,7 @@
 import { test, before, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import fsp from 'node:fs/promises';
-import { openServed, findChrome } from './browser.mjs';
+import { openServed, findChrome, stalledAt } from './browser.mjs';
 import { build, haveFfmpeg } from './fixtures.mjs';
 
 const chrome = findChrome();
@@ -72,6 +72,12 @@ const SCRIPT = `
   window.__step('play');
   $('.item.active .item__body').click();
   const v = $('#video');
+  window.__state = () => ({
+    src: v.getAttribute('src'), readyState: v.readyState, networkState: v.networkState,
+    error: v.error && v.error.code + ' ' + v.error.message,
+    duration: v.duration, currentTime: v.currentTime,
+    title: $('#titleName').textContent, prep: document.body.className + ' | ' + $('#stage').className,
+  });
   /* Long waits, because this part costs real seconds that the virtual
      clock cannot skip: the browser has to fetch three megabytes and
      open the container. Measured at around three and a half seconds,
@@ -294,7 +300,7 @@ before(async () => {
     fonts: true, width: 1280, height: 800, budget: 20000,
   });
   if (R.fatal) throw new Error('the page script broke:\n' + R.fatal);
-  if (R.stalled) throw new Error('the page script stopped at: ' + R.stalled);
+  if (R.stalled) throw new Error(stalledAt(R));
 }, { timeout: 180000 });
 
 describe('the queue of the previous session', { skip }, () => {
@@ -572,7 +578,7 @@ describe('a dropped file handed over to the server', { skip }, () => {
       seed: { 'pip.set.v': '5' },
     });
     if (D.fatal) throw new Error('the page script broke:\n' + D.fatal);
-    if (D.stalled) throw new Error('the page script stopped at: ' + D.stalled);
+    if (D.stalled) throw new Error(stalledAt(D));
   }, { timeout: 120000 });
 
   test('it ends up playing through the server, with the picture shown', () => {
